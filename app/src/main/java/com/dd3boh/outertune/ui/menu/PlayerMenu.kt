@@ -110,6 +110,7 @@ import kotlin.math.round
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
+@Suppress("NonObservableLocale")
 @Composable
 fun PlayerMenu(
     mediaMetadata: MediaMetadata?,
@@ -704,7 +705,6 @@ fun getNextInterval(targetMin: Long): Pair<String, Float> {
     } else if (intervalMinutes < 0) {
         // Next hour
         now.plusHours(1).plusMinutes(targetMin - now.minute)
-//        now.plusMinutes((60 - now.minute) + targetMin)        // other way to calculate targetTime
     } else {
         // Equal to 0
         now.plusHours(1)
