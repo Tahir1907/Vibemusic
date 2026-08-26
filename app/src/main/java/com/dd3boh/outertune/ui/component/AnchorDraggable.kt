@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 O﻿ute﻿rTu﻿ne Project
+ * Copyright (C) 2025 OuterTune Project
  *
  * SPDX-License-Identifier: GPL-3.0
  *
@@ -77,12 +77,13 @@ fun SwipeToQueueBox(
     SwipeActionBox(
         firstAction = Pair(Icons.AutoMirrored.Rounded.PlaylistPlay, {
             playerConnection?.enqueueNext(item)
+            val message = context.getString(
+                R.string.song_added_to_queue,
+                item.mediaMetadata.title
+            )
             coroutineScope.launch {
                 snackbarHostState?.showSnackbar(
-                    message = context.getString(
-                        R.string.song_added_to_queue,
-                        item.mediaMetadata.title
-                    ),
+                    message = message,
                     withDismissAction = true,
                     duration = SnackbarDuration.Short
                 )
@@ -90,13 +91,14 @@ fun SwipeToQueueBox(
         }),
         secondAction = Pair(Icons.AutoMirrored.Rounded.PlaylistAdd, {
             playerConnection?.enqueueEnd(item)
+            val message = context.getString(
+                R.string.song_added_to_queue_end,
+                item.mediaMetadata.title
+            )
             coroutineScope.launch {
                 val job = launch {
                     snackbarHostState?.showSnackbar(
-                        message = context.getString(
-                            R.string.song_added_to_queue_end,
-                            item.mediaMetadata.title
-                        ),
+                        message = message,
                         withDismissAction = true,
                         duration = SnackbarDuration.Indefinite
                     )
@@ -195,7 +197,7 @@ fun SwipeActionBox(
                         tint = MaterialTheme.colorScheme.onPrimary,
                         icon = firstAction.first,
                         modifier = Modifier
-                            .alpha(if (progress.intValue == 1) 1f else 0.6f) // TODO: wai alpha change cause hidden edge to become un-hidden
+                            .alpha(if (progress.intValue == 1) 1f else 0.6f)
                             .width(defaultActionSize)
                             .fillMaxHeight()
                             .align(Alignment.CenterStart)
@@ -217,8 +219,6 @@ fun SwipeActionBox(
                                 .offset {
                                     val x = -screenWidth.value + swipeOffset.floatValue
                                     val size = defaultActionSize.value
-                                    // x-\frac{x^{2}}{k}-\left(0.9s\right)
-                                    // x = firstAction offset, k = tightnessFactor, s = size
                                     IntOffset(
                                         ((x - (x * x / tightnessFactor)) - (size * 0.9)
                                             .coerceIn(0.0, size.toDouble())).roundToInt(), 0
@@ -246,7 +246,7 @@ private fun resetDrag(scope: CoroutineScope, offset: MutableState<Float>) {
         animate(
             initialValue = offset.value,
             targetValue = 0f,
-            animationSpec = tween<Float>(durationMillis = 500) // slowSnapAnimationSpec
+            animationSpec = tween<Float>(durationMillis = 500)
         ) { value, _ ->
             offset.value = value
         }
