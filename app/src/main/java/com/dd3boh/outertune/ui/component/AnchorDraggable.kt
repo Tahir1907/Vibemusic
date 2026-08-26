@@ -45,8 +45,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.MediaItem
@@ -70,20 +70,24 @@ fun SwipeToQueueBox(
     snackbarHostState: SnackbarHostState? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val playerConnection = LocalPlayerConnection.current
+
+    val queueMessage = stringResource(
+        R.string.song_added_to_queue,
+        item.mediaMetadata.title ?: ""
+    )
+    val queueEndMessage = stringResource(
+        R.string.song_added_to_queue_end,
+        item.mediaMetadata.title ?: ""
+    )
 
     SwipeActionBox(
         firstAction = Pair(Icons.AutoMirrored.Rounded.PlaylistPlay, {
             playerConnection?.enqueueNext(item)
-            val message = context.getString(
-                R.string.song_added_to_queue,
-                item.mediaMetadata.title
-            )
             coroutineScope.launch {
                 snackbarHostState?.showSnackbar(
-                    message = message,
+                    message = queueMessage,
                     withDismissAction = true,
                     duration = SnackbarDuration.Short
                 )
@@ -91,14 +95,10 @@ fun SwipeToQueueBox(
         }),
         secondAction = Pair(Icons.AutoMirrored.Rounded.PlaylistAdd, {
             playerConnection?.enqueueEnd(item)
-            val message = context.getString(
-                R.string.song_added_to_queue_end,
-                item.mediaMetadata.title
-            )
             coroutineScope.launch {
                 val job = launch {
                     snackbarHostState?.showSnackbar(
-                        message = message,
+                        message = queueEndMessage,
                         withDismissAction = true,
                         duration = SnackbarDuration.Indefinite
                     )
