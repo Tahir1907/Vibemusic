@@ -50,7 +50,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -98,15 +97,14 @@ fun HistoryScreen(
 ) {
     val database = LocalDatabase.current
     val density = LocalDensity.current
-    val context = LocalContext.current
     val menuState = LocalMenuState.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val isPlaying by playerConnection.isPlaying.collectAsState()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
 
     val swipeEnabled by rememberPreference(SwipeToQueueKey, true)
-
     val snackbarHostState = LocalSnackbarHostState.current
+    val queueLocalHistoryPrefix = stringResource(R.string.queue_local_history)
 
     var isSearching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable(stateSaver = TextFieldValue.Saver) {
@@ -149,12 +147,13 @@ fun HistoryScreen(
         BackHandler(onBack = onExitSelectionMode)
     }
 
+    @Composable
     fun dateAgoToString(dateAgo: DateAgo): String {
         return when (dateAgo) {
-            DateAgo.Today -> context.getString(R.string.today)
-            DateAgo.Yesterday -> context.getString(R.string.yesterday)
-            DateAgo.ThisWeek -> context.getString(R.string.this_week)
-            DateAgo.LastWeek -> context.getString(R.string.last_week)
+            DateAgo.Today -> stringResource(R.string.today)
+            DateAgo.Yesterday -> stringResource(R.string.yesterday)
+            DateAgo.ThisWeek -> stringResource(R.string.this_week)
+            DateAgo.LastWeek -> stringResource(R.string.last_week)
             is DateAgo.Other -> dateAgo.date.format(DateTimeFormatter.ofPattern("yyyy/MM"))
         }
     }
@@ -259,6 +258,7 @@ fun HistoryScreen(
                 itemsIndexed(
                     items = eventsGroup,
                 ) { index, event ->
+                    val dateAgoText = dateAgoToString(dateAgo)
                     SongListItem(
                         song = event.song,
                         navController = navController,
@@ -285,11 +285,7 @@ fun HistoryScreen(
                             } else {
                                 playerConnection.playQueue(
                                     ListQueue(
-                                        title = "${context.getString(R.string.queue_local_history)}: ${
-                                            dateAgoToString(
-                                                dateAgo
-                                            )
-                                        }",
+                                        title = "$queueLocalHistoryPrefix: $dateAgoText",
                                         items = eventsGroup.map { it.song.toMediaMetadata() },
                                         startIndex = index
                                     )
