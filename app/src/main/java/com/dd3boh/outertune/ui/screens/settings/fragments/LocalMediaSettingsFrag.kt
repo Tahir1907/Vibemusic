@@ -115,6 +115,8 @@ fun ColumnScope.LocalScannerFrag() {
     val coroutineScope = rememberCoroutineScope()
     val playerConnection = LocalPlayerConnection.current
     val snackbarHostState = LocalSnackbarHostState.current
+    val scannerMissingStoragePermMsg = stringResource(R.string.scanner_missing_storage_perm)
+    val scannerScanFailMsg = stringResource(R.string.scanner_scan_fail)
 
     // scanner vars
     val scannerState by scannerState.collectAsState()
@@ -180,7 +182,7 @@ fun ColumnScope.LocalScannerFrag() {
                 ) {
                     coroutineScope.launch {
                         snackbarHostState.showSnackbar(
-                            message = context.getString(R.string.scanner_missing_storage_perm),
+                            message = scannerMissingStoragePermMsg,
                             withDismissAction = true,
                             duration = SnackbarDuration.Short
                         )
@@ -231,7 +233,7 @@ fun ColumnScope.LocalScannerFrag() {
                             scannerFailure = true
 
                             snackbarHostState.showSnackbar(
-                                message = "${context.getString(R.string.scanner_scan_fail)}: ${e.message}",
+                                message = "$scannerScanFailMsg: ${e.message}",
                                 withDismissAction = true,
                                 duration = SnackbarDuration.Short
                             )
@@ -267,7 +269,7 @@ fun ColumnScope.LocalScannerFrag() {
                             scannerFailure = true
 
                             snackbarHostState.showSnackbar(
-                                message = "${context.getString(R.string.scanner_scan_fail)}: ${e.message}",
+                                message = "$scannerScanFailMsg: ${e.message}",
                                 withDismissAction = true,
                                 duration = SnackbarDuration.Short
                             )
@@ -619,4 +621,3 @@ fun ColumnScope.LocalScannerExtraFrag() {
     )
     InfoLabel(stringResource(R.string.scanner_type_tooltip))
 }
-
