@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 OuterTune Project
+ * Copyright (C) 2025 O​u​t​er​Tu​ne Project
  *
  * SPDX-License-Identifier: GPL-3.0
  *
@@ -220,19 +220,21 @@ fun SetupWizard(
 
             LinearProgressIndicator(
                 progress = { oobeStatus.toFloat() / (OOBE_VERSION - 1) },
+//                color = ProgressIndicatorDefaults.linearColor,
+//                trackColor = MaterialTheme.colorScheme.primary,
                 strokeCap = StrokeCap.Butt,
                 drawStopIndicator = {},
                 modifier = Modifier
                     .weight(1f, false)
-                    .height(8.dp)
-                    .padding(2.dp),
+                    .height(8.dp)  // Height of the progress bar
+                    .padding(2.dp),  // Add some padding at the top
             )
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.clickable {
                     if (oobeStatus == 1) {
-                        filter = LibraryFilter.ALL
+                        filter = LibraryFilter.ALL // hax
                     }
 
                     if (oobeStatus < OOBE_VERSION) {
@@ -316,7 +318,7 @@ fun SetupWizard(
                         )
 
                         Text(
-                            text = "Welcome to VibeMusic",
+                            text = stringResource(R.string.oobe_welcome_message),
                             style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -334,25 +336,25 @@ fun SetupWizard(
                                 title = stringResource(R.string.oobe_ytm_integration),
                                 description = stringResource(R.string.oobe_ytm_integration_description),
                                 icon = Icons.Rounded.MusicNote,
-                                tint = MaterialTheme.colorScheme.secondary
+                                MaterialTheme.colorScheme.secondary
                             )
                             OobeFeatureRow(
                                 title = stringResource(R.string.oobe_ad_free_exp),
                                 description = stringResource(R.string.oobe_ad_free_exp_description),
                                 icon = Icons.Rounded.Block,
-                                tint = Color.Red
+                                Color.Red
                             )
                             OobeFeatureRow(
                                 title = stringResource(R.string.oobe_cross_platform_sync),
                                 description = stringResource(R.string.oobe_cross_platform_sync_description),
                                 icon = Icons.Rounded.Sync,
-                                tint = MaterialTheme.colorScheme.tertiary
+                                MaterialTheme.colorScheme.tertiary
                             )
                             OobeFeatureRow(
                                 title = stringResource(R.string.oobe_local_music_support),
                                 description = stringResource(R.string.oobe_local_music_support_description),
                                 icon = Icons.Rounded.SdCard,
-                                tint = MaterialTheme.colorScheme.onSurface
+                                MaterialTheme.colorScheme.onSurface
                             )
                         }
 
@@ -619,7 +621,7 @@ fun SetupWizard(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = stringResource(R.string.song_cache),
+                            text = stringResource(R.string.song_cache), // TODO: oobe_cache_subtitle when localization is done
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center,
@@ -695,6 +697,7 @@ fun SetupWizard(
                                     tempFilePath = null
                                 },
                                 isInputValid = uriListFromString(scanPaths).none {
+                                    // download path cannot a scan path, or a subdir of a scan path
                                     tempFilePath.toString().length <= it.toString().length && tempFilePath.toString()
                                         .contains(it.toString())
                                 },
@@ -707,6 +710,7 @@ fun SetupWizard(
                                 ) { uri ->
                                     if (tempFilePath.toString() == uri.toString()) return@rememberLauncherForActivityResult
                                     if (uri?.path != null) {
+                                        // Take persistable URI permission
                                         val contentResolver = context.contentResolver
                                         val takeFlags: Int =
                                             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -717,6 +721,7 @@ fun SetupWizard(
                                 }
 
                                 val valid = uriListFromString(scanPaths).none {
+                                    // download path cannot a scan path, or a subdir of a scan path
                                     tempFilePath.toString().length <= it.toString().length && tempFilePath.toString()
                                         .contains(it.toString())
                                 }
@@ -748,6 +753,7 @@ fun SetupWizard(
                                     }
                                 }
 
+                                // add folder button
                                 Column {
                                     Button(onClick = { dirPickerLauncher.launch(null) }) {
                                         Text(stringResource(R.string.scan_paths_add_folder))
