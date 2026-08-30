@@ -92,6 +92,7 @@ fun SongListItem(
 
     showMenu: Boolean = true,
     showLikedIcon: Boolean = true,
+    showInLibraryIcon: Boolean = true,
     showDownloadIcon: Boolean = true,
 
     thumbnailSize: Int,
@@ -115,7 +116,12 @@ fun SongListItem(
                 if (showLikedIcon && song.song.liked) {
                     Icon.Favorite()
                 }
-                if (!song.song.isLocal && showDownloadIcon) {
+                if (showInLibraryIcon && song.song.isLocal) {
+                    Icon.FolderCopy()
+                } else if (showInLibraryIcon && song.song.inLibrary != null) {
+                    Icon.Library()
+                }
+                if (showDownloadIcon && !song.song.isLocal) {
                     val download by LocalDownloadUtil.current.getDownload(song.id).collectAsState(initial = null)
                     Icon.Download(download)
                 }

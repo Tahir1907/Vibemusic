@@ -74,7 +74,6 @@ class FFmpegScanner() : MetadataScanner {
             }
 
             val songId = SongEntity.generateSongId()
-            var acoustid: String? = null
             var rawTitle: String? = data.title
             val rawArtists: String? = data.artist
             var albumName: String? = data.album
@@ -114,6 +113,7 @@ class FFmpegScanner() : MetadataScanner {
                                 ArtistEntity(
                                     ArtistEntity.generateArtistId(),
                                     artistVal.substringAfter(':').trim(),
+                                    isLocal = true
                                 )
                             )
                         }
@@ -127,6 +127,7 @@ class FFmpegScanner() : MetadataScanner {
                                 GenreEntity(
                                     GenreEntity.generateGenreId(),
                                     genreVal.substringAfter(':').trim(),
+                                    isLocal = true
                                 )
                             )
                         }
@@ -156,12 +157,9 @@ class FFmpegScanner() : MetadataScanner {
                             }
                         }
                     }
-                    "ACOUSTID_ID" -> {
-                        acoustid = it.substringAfter(':').trim()
-                    }
 
                     else -> {
-                        extraData += "$it\n"
+                        extraData += "$tag: $it\n"
                     }
                 }
             }
@@ -204,18 +202,19 @@ class FFmpegScanner() : MetadataScanner {
                 thumbnailUrl = file.absolutePath,
                 songCount = 1,
                 duration = duration.toInt(),
+                isLocal = true
             ) else null
 
             // parse artist
             rawArtists?.split(ARTIST_SEPARATORS)?.forEach { element ->
                 val artistVal = element.trim()
-                artistList.add(ArtistEntity(ArtistEntity.generateArtistId(), artistVal))
+                artistList.add(ArtistEntity(ArtistEntity.generateArtistId(), artistVal, isLocal = true))
             }
 
             // parse genre
             genres?.split(";")?.forEach { element ->
                 val genreVal = element.trim()
-                genresList.add(GenreEntity(GenreEntity.generateGenreId(), genreVal))
+                genresList.add(GenreEntity(GenreEntity.generateGenreId(), genreVal, isLocal = true))
             }
 
             // parse date and year
@@ -239,7 +238,6 @@ class FFmpegScanner() : MetadataScanner {
                 Song(
                     song = SongEntity(
                         id = songId,
-                        acoustid = acoustid,
                         title = title,
                         duration = duration.toInt(), // we use seconds for duration
                         thumbnailUrl = file.absolutePath,

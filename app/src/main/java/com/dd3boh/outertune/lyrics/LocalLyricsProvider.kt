@@ -19,7 +19,6 @@ object LocalLyricsProvider : LyricsProvider {
      *
      * @param title file path of the song, NOT the song title
      */
-    @Deprecated("Use getLyricsNew")
     override suspend fun getLyrics(
         id: String,
         title: String,

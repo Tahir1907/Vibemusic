@@ -3,6 +3,7 @@ package com.dd3boh.outertune.playback.queues
 import com.dd3boh.outertune.models.MediaMetadata
 
 class ListQueue(
+    override val playlistId: String? = null,
     val title: String? = null,
     val items: List<MediaMetadata>,
     override val startShuffled: Boolean = false,

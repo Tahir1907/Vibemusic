@@ -115,8 +115,6 @@ fun ColumnScope.LocalScannerFrag() {
     val coroutineScope = rememberCoroutineScope()
     val playerConnection = LocalPlayerConnection.current
     val snackbarHostState = LocalSnackbarHostState.current
-    val scannerMissingStoragePermMsg = stringResource(R.string.scanner_missing_storage_perm)
-    val scannerScanFailMsg = stringResource(R.string.scanner_scan_fail)
 
     // scanner vars
     val scannerState by scannerState.collectAsState()
@@ -142,7 +140,7 @@ fun ColumnScope.LocalScannerFrag() {
     )
     val scannerImpl by rememberEnumPreference(
         key = ScannerImplKey,
-        defaultValue = ScannerImpl.MEDIASTORE
+        defaultValue = ScannerImpl.TAGLIB
     )
     val strictExtensions by rememberPreference(ScannerStrictExtKey, defaultValue = false)
     val strictFilePaths by rememberPreference(ScannerStrictFilePathsKey, defaultValue = false)
@@ -182,7 +180,7 @@ fun ColumnScope.LocalScannerFrag() {
                 ) {
                     coroutineScope.launch {
                         snackbarHostState.showSnackbar(
-                            message = scannerMissingStoragePermMsg,
+                            message = context.getString(R.string.scanner_missing_storage_perm),
                             withDismissAction = true,
                             duration = SnackbarDuration.Short
                         )
@@ -233,7 +231,7 @@ fun ColumnScope.LocalScannerFrag() {
                             scannerFailure = true
 
                             snackbarHostState.showSnackbar(
-                                message = "$scannerScanFailMsg: ${e.message}",
+                                message = "${context.getString(R.string.scanner_scan_fail)}: ${e.message}",
                                 withDismissAction = true,
                                 duration = SnackbarDuration.Short
                             )
@@ -269,7 +267,7 @@ fun ColumnScope.LocalScannerFrag() {
                             scannerFailure = true
 
                             snackbarHostState.showSnackbar(
-                                message = "$scannerScanFailMsg: ${e.message}",
+                                message = "${context.getString(R.string.scanner_scan_fail)}: ${e.message}",
                                 withDismissAction = true,
                                 duration = SnackbarDuration.Short
                             )
@@ -566,7 +564,7 @@ fun ColumnScope.LocalScannerExtraFrag() {
     )
     val (scannerImpl, onScannerImplChange) = rememberEnumPreference(
         key = ScannerImplKey,
-        defaultValue = ScannerImpl.MEDIASTORE
+        defaultValue = ScannerImpl.TAGLIB
     )
     val (strictExtensions, onStrictExtensionsChange) = rememberPreference(ScannerStrictExtKey, defaultValue = false)
     val (strictFilePaths, onStrictFilePathsChange) = rememberPreference(ScannerStrictFilePathsKey, defaultValue = false)
@@ -613,11 +611,13 @@ fun ColumnScope.LocalScannerExtraFrag() {
         valueText = {
             when (it) {
                 ScannerImpl.MEDIASTORE -> stringResource(R.string.scanner_type_mediastore)
+                ScannerImpl.TAGLIB -> stringResource(R.string.scanner_type_taglib)
                 ScannerImpl.FFMPEG_EXT -> stringResource(R.string.scanner_type_ffmpeg_ext)
             }
         },
-        disabled = { it == ScannerImpl.FFMPEG_EXT && !ENABLE_FFMETADATAEX },
+        disabled = { it == ScannerImpl.FFMPEG_EXT && !ENABLE_FFMETADATAEX && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R },
         values = ScannerImpl.entries,
     )
     InfoLabel(stringResource(R.string.scanner_type_tooltip))
 }
+

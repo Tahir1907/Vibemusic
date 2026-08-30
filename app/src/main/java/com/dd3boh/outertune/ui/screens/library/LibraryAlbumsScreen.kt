@@ -28,7 +28,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +64,7 @@ import com.dd3boh.outertune.constants.CONTENT_TYPE_HEADER
 import com.dd3boh.outertune.constants.GridThumbnailHeight
 import com.dd3boh.outertune.constants.LibraryViewType
 import com.dd3boh.outertune.constants.LibraryViewTypeKey
+import com.dd3boh.outertune.constants.LocalLibraryEnableKey
 import com.dd3boh.outertune.ui.component.ChipsRow
 import com.dd3boh.outertune.ui.component.EmptyPlaceholder
 import com.dd3boh.outertune.ui.component.LazyColumnScrollbar
@@ -98,18 +103,23 @@ fun LibraryAlbumsScreen(
 
     val (sortType, onSortTypeChange) = rememberEnumPreference(AlbumSortTypeKey, AlbumSortType.CREATE_DATE)
     val (sortDescending, onSortDescendingChange) = rememberPreference(AlbumSortDescendingKey, true)
+    val localLibEnable by rememberPreference(LocalLibraryEnableKey, defaultValue = true)
 
     val albums by viewModel.allAlbums.collectAsState()
+    val isSyncingLibraryAlbums by viewModel.isSyncingRemoteAlbums.collectAsState()
+    val pullRefreshState = rememberPullToRefreshState()
 
     val lazyListState = rememberLazyListState()
     val lazyGridState = rememberLazyGridState()
+
+    LaunchedEffect(Unit) { viewModel.syncAlbums() }
 
     val filterContent = @Composable {
         var showStoragePerm by remember {
             mutableStateOf(context.checkSelfPermission(MEDIA_PERMISSION_LEVEL) != PackageManager.PERMISSION_GRANTED)
         }
         Column {
-            if (showStoragePerm) {
+            if (localLibEnable && showStoragePerm) {
                 TextButton(
                     onClick = {
                         showStoragePerm =
@@ -137,8 +147,10 @@ fun LibraryAlbumsScreen(
                     currentValue = filter,
                     onValueUpdate = {
                         filter = it
+                        if (it == AlbumFilter.LIBRARY) viewModel.syncAlbums()
                     },
                     modifier = Modifier.weight(1f),
+                    isLoading = { filter -> filter == AlbumFilter.LIBRARY && isSyncingLibraryAlbums }
                 )
 
                 IconButton(
@@ -228,6 +240,13 @@ fun LibraryAlbumsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .pullToRefresh(
+                state = pullRefreshState,
+                isRefreshing = isSyncingLibraryAlbums,
+                onRefresh = {
+                    viewModel.syncAlbums(true)
+                }
+            ),
     ) {
         ScrollToTopManager(navController, lazyListState)
         when (viewType) {
@@ -337,5 +356,13 @@ fun LibraryAlbumsScreen(
                 )
             }
         }
+
+        Indicator(
+            isRefreshing = isSyncingLibraryAlbums,
+            state = pullRefreshState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(LocalPlayerAwareWindowInsets.current.asPaddingValues()),
+        )
     }
 }

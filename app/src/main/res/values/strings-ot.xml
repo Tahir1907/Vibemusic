@@ -21,8 +21,6 @@ while also allowing users to translate our app as well. New, specific strings to
     <string name="remote_history">Remote</string>
 
 <!-- Library screens -->
-    <string name="folder_nav_prev">..</string>
-    <string name="folder_nav_prev_subtitle">Previous folder</string>
     <string name="library_filter">Library filter</string>
     <string name="library_empty">Your library contents will show up here</string>
     <string name="missing_media_permission_warning">Storage permissions is required for local media. Click to grant permission.</string>
@@ -135,8 +133,8 @@ while also allowing users to translate our app as well. New, specific strings to
     <string name="tab_arrangement">Arrange tabs</string>
     <string name="tab_arrangement_disable_tip">--- Drag below here to disable ---</string>
     <string name="tab_arrangement_home_required">The Home tab is required.</string>
-    <string name="tablet_ui_title">Enable tablet UI</string>
-    <string name="tablet_ui_title_description">Allow a split interface optimized for large screens. This setting has no effect if minimum width requirements are not met</string>
+    <string name="tablet_ui_title">Force tablet UI</string>
+    <string name="tablet_ui_title_description">Force a split interface optimized for large screens. This setting has no effect if minimum width requirements are not met</string>
     <string name="filter_arrangement">Arrange filters</string>
 
 <!-- Content settings -->
@@ -153,12 +151,6 @@ while also allowing users to translate our app as well. New, specific strings to
     <string name="sync_mode_rw">Read write (Also allow changes to remote content)</string>
     <string name="ytm_sync">Automatically sync with your YouTube Music account</string>
     <string name="wifi_only">Wi-Fi only</string>
-
-<!-- Interface settings -->
-    <string name="keep_screen_on">Keep screen on</string>
-    <string name="keep_screen_on_lyrics">When lyrics are shown</string>
-    <string name="keep_screen_on_player">Player is active</string>
-    <string name="keep_screen_on_never">Never</string>
 
 <!-- Player settings -->
     <string name="audio_decoder_ffmpeg_only">Prioritize FFmpeg decoders</string>
@@ -310,7 +302,7 @@ while also allowing users to translate our app as well. New, specific strings to
 
 <!-- Setup wizard -->
     <string name="oobe_welcome_message">Welcome to OuterTune</string>
-    <string name="oobe_welcome_tip">For the best experience, we recommend completing a quick setup to personalize key settings</string>
+    <string name="oobe_welcome_tip">For the best experience, we recommend completing a quick setup to personalize key settings like theme, YouTube account, local media, and downloads.</string>
 
     <!-- Landing -->
     <string name="oobe_ytm_integration">YouTube Music Integration</string>
@@ -342,7 +334,7 @@ while also allowing users to translate our app as well. New, specific strings to
 
     <!-- Setup complete -->
     <string name="oobe_complete_title">You\'re All Set!</string>
-    <string name="oobe_complete">OuterTune is set up and ready to use. Enjoy!</string>
+    <string name="oobe_complete">OuterTune is set up and ready to use. Explore your music, discover new tracks, and enjoy the experience!</string>
 
 <!-- M3U -->
     <string name="import_failed_songs">Could not import</string>

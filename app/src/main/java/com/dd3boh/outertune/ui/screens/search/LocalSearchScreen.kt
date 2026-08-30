@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -73,7 +74,7 @@ fun LocalSearchScreen(
     onDismiss: () -> Unit,
     viewModel: LocalSearchViewModel = hiltViewModel(),
 ) {
-    val queueSearchedSongsTitle = stringResource(R.string.queue_searched_songs_ot)
+    val context = LocalContext.current
     val density = LocalDensity.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val playerConnection = LocalPlayerConnection.current ?: return
@@ -188,7 +189,7 @@ fun LocalSearchScreen(
                                         .map { it.toMediaMetadata() }
                                     playerConnection.playQueue(
                                         ListQueue(
-                                            title = "$queueSearchedSongsTitle $query",
+                                            title = "${context.getString(R.string.queue_searched_songs_ot)} $query",
                                             items = songs,
                                             startIndex = songs.indexOfFirst { it.id == item.id }
                                         ))

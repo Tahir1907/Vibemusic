@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2024 z-huang/InnerTune
- * Copyright (C) 2025 OuterTune Project
+ * Copyright (C) 2025 O⁠ute⁠rTu⁠ne Project
  *
  * SPDX-License-Identifier: GPL-3.0
  *
@@ -418,6 +418,7 @@ fun CounterDialog(
                     ) {
                         Text(
                             text = "+",
+//                            fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleLarge
                         )
                     }
@@ -499,7 +500,6 @@ fun DetailsDialog(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = LocalSnackbarHostState.current
-    val copiedMessage = stringResource(R.string.copied)
 
     AlertDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -599,7 +599,7 @@ fun DetailsDialog(
                                 coroutineScope.launch {
                                     val job = launch {
                                         snackbarHostState.showSnackbar(
-                                            message = copiedMessage,
+                                            message = context.getString(R.string.copied),
                                             withDismissAction = true,
                                             duration = SnackbarDuration.Indefinite
                                         )

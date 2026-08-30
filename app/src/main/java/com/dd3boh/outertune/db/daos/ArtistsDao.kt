@@ -18,8 +18,11 @@ import com.dd3boh.outertune.db.entities.ArtistEntity
 import com.dd3boh.outertune.db.entities.Song
 import com.dd3boh.outertune.db.entities.SongArtistMap
 import com.dd3boh.outertune.extensions.reversed
+import com.dd3boh.outertune.ui.utils.resize
+import com.zionhuang.innertube.pages.ArtistPage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.LocalDateTime
 
 /*
  * Logic related to artists entities and their mapping
@@ -47,6 +50,9 @@ interface ArtistsDao {
 
     @Query("SELECT * FROM artist WHERE name = :name")
     fun artistByName(name: String): ArtistEntity?
+
+    @Query("SELECT * FROM artist WHERE isLocal = 1 AND name LIKE '%' || :name || '%'")
+    fun localArtistsByNameFuzzy(name: String): List<ArtistEntity>
 
     @Query("""
         SELECT 
@@ -90,10 +96,13 @@ interface ArtistsDao {
     fun searchArtistSongs(query: String, previewSize: Int = Int.MAX_VALUE): Flow<List<Song>>
 
     @Query("SELECT * FROM artist WHERE name LIKE '%' || :query || '%' LIMIT :previewSize")
-    fun artistsByNameFuzzy(query: String, previewSize: Int = Int.MAX_VALUE): List<ArtistEntity>
+    fun artistsByNameFuzzy(query: String, previewSize: Int = Int.MAX_VALUE): Flow<List<ArtistEntity>>
 
-    @Query("SELECT * FROM artist")
-    fun allArtists(): List<ArtistEntity>
+    @Query("SELECT * FROM artist WHERE isLocal != 1")
+    fun allRemoteArtists(): Flow<List<ArtistEntity>>
+
+    @Query("SELECT * FROM artist WHERE isLocal = 1")
+    fun allLocalArtists(): List<ArtistEntity>
 
     @Query("""
         SELECT 
@@ -160,7 +169,9 @@ interface ArtistsDao {
         """)
 
         return _getArtists(query).map { artists ->
-            artists.reversed(descending)
+            artists
+                .filter { it.artist.isYouTubeArtist || it.artist.isLocal } // TODO: add ui to filter by local or remote or something idk
+                .reversed(descending)
         }
     }
 
@@ -177,10 +188,11 @@ interface ArtistsDao {
         FROM artist
             LEFT JOIN song_artist_map sam ON artist.id = sam.artistId
             LEFT JOIN song ON sam.songId = song.id
+        WHERE artist.isLocal = 1
         GROUP BY artist.id
         ORDER BY artist.name ASC
     """)
-    fun artistsByName(): List<Artist>
+    fun localArtistsByName(): List<Artist>
     // endregion
 
     // region Artist Songs Sort
@@ -213,6 +225,17 @@ interface ArtistsDao {
     fun update(artist: ArtistEntity)
 
     @Transaction
+    fun update(artist: ArtistEntity, artistPage: ArtistPage) {
+        update(
+            artist.copy(
+                name = artistPage.artist.title,
+                thumbnailUrl = artistPage.artist.thumbnail?.resize(544, 544),
+                lastUpdateTime = LocalDateTime.now()
+            )
+        )
+    }
+
+    @Transaction
     @Query("UPDATE song_artist_map SET artistId = :newId WHERE artistId = :oldId")
     fun updateSongArtistMap(oldId: String, newId: String)
     // endregion
@@ -233,7 +256,7 @@ interface ArtistsDao {
     fun safeDeleteArtist(artistId: String)
 
     @Transaction
-    @Query("DELETE FROM artist")
-    fun nukeArtists()
+    @Query("DELETE FROM artist WHERE isLocal = 1")
+    fun nukeLocalArtists()
     // endregion
 }

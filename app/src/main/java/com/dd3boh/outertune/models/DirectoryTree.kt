@@ -129,9 +129,9 @@ class DirectoryTree(path: String, var culmSongs: CulmSongs) {
 
         // search for song in current dir
         if (path.indexOf('/') == -1) {
-            val existing: Song = files.first { getFileName(it.song.localPath) == getFileName(path) }
-            Log.v(TAG, "Searching for song, found?: ${existing.id} Name: ${existing.song.title}")
-            return existing
+            val foundSong: Song = files.first { getFileName(it.song.localPath) == getFileName(path) }
+            Log.v(TAG, "Searching for song, found?: ${foundSong.id} Name: ${foundSong.song.title}")
+            return foundSong
         }
 
         // there is still subdirs to process
@@ -161,25 +161,25 @@ class DirectoryTree(path: String, var culmSongs: CulmSongs) {
      * Retrieve a list of all the songs
      */
     fun toList(): List<Song> {
-        val items = ArrayList<Song>()
+        val songs = ArrayList<Song>()
 
         fun traverseTree(tree: DirectoryTree, result: ArrayList<Song>) {
             result.addAll(tree.files)
             tree.subdirs.forEach { traverseTree(it, result) }
         }
 
-        traverseTree(this, items)
-        return items
+        traverseTree(this, songs)
+        return songs
     }
 
     /**
      * Retrieve a list of all the songs in the current directory, adhering to sort preferences.
      */
     fun toSortedList(sortType: FolderSongSortType, sortDescending: Boolean): List<Song> {
-        val items = files.toMutableList()
+        val songs = files.toMutableList()
 
         // sort songs. Ignore any subfolder structure
-        items.sortBy {
+        songs.sortBy {
             when (sortType) {
                 FolderSongSortType.CREATE_DATE -> numberToAlpha(it.song.inLibrary?.toEpochSecond(ZoneOffset.UTC) ?: -1L)
                 FolderSongSortType.MODIFIED_DATE -> numberToAlpha(it.song.getDateModifiedLong() ?: -1L)
@@ -192,9 +192,9 @@ class DirectoryTree(path: String, var culmSongs: CulmSongs) {
         }
 
         if (sortDescending) {
-            items.reverse()
+            songs.reverse()
         }
-        return items
+        return songs
     }
 
     /**
@@ -202,17 +202,17 @@ class DirectoryTree(path: String, var culmSongs: CulmSongs) {
      * Subfolder structure will be completely ignored.
      */
     fun toSortedListRecursive(sortType: SongSortType, sortDescending: Boolean): List<Song> {
-        val items = ArrayList<Song>()
+        val songs = ArrayList<Song>()
 
         fun traverseTree(tree: DirectoryTree, result: ArrayList<Song>) {
             result.addAll(tree.files)
             tree.subdirs.forEach { traverseTree(it, result) }
         }
 
-        traverseTree(this, items)
+        traverseTree(this, songs)
 
         // sort songs. Ignore any subfolder structure
-        items.sortBy {
+        songs.sortBy {
             when (sortType) {
                 SongSortType.CREATE_DATE -> it.song.inLibrary?.toEpochSecond(ZoneOffset.UTC).toString()
                 SongSortType.MODIFIED_DATE -> it.song.getDateModifiedLong().toString()
@@ -224,9 +224,9 @@ class DirectoryTree(path: String, var culmSongs: CulmSongs) {
         }
 
         if (sortDescending) {
-            items.reverse()
+            songs.reverse()
         }
-        return items
+        return songs
     }
 
     /**

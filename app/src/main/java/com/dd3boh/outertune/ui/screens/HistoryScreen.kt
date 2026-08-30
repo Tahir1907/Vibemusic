@@ -3,6 +3,7 @@ package com.dd3boh.outertune.ui.screens
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,11 +19,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -50,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -65,24 +69,32 @@ import com.dd3boh.outertune.LocalPlayerAwareWindowInsets
 import com.dd3boh.outertune.LocalPlayerConnection
 import com.dd3boh.outertune.LocalSnackbarHostState
 import com.dd3boh.outertune.R
+import com.dd3boh.outertune.constants.HistorySource
+import com.dd3boh.outertune.constants.InnerTubeCookieKey
 import com.dd3boh.outertune.constants.ListThumbnailSize
 import com.dd3boh.outertune.constants.SwipeToQueueKey
 import com.dd3boh.outertune.constants.TopBarInsets
 import com.dd3boh.outertune.db.entities.EventWithSong
+import com.dd3boh.outertune.extensions.toMediaItem
 import com.dd3boh.outertune.extensions.togglePlayPause
 import com.dd3boh.outertune.models.toMediaMetadata
 import com.dd3boh.outertune.playback.queues.ListQueue
+import com.dd3boh.outertune.ui.component.ChipsRow
 import com.dd3boh.outertune.ui.component.FloatingFooter
 import com.dd3boh.outertune.ui.component.LazyColumnScrollbar
 import com.dd3boh.outertune.ui.component.NavigationTitle
 import com.dd3boh.outertune.ui.component.ScrollToTopManager
 import com.dd3boh.outertune.ui.component.SelectHeader
+import com.dd3boh.outertune.ui.component.SwipeToQueueBox
 import com.dd3boh.outertune.ui.component.button.IconButton
 import com.dd3boh.outertune.ui.component.items.SongListItem
+import com.dd3boh.outertune.ui.component.items.YouTubeListItem
+import com.dd3boh.outertune.ui.menu.YouTubeSongMenu
 import com.dd3boh.outertune.ui.utils.backToMain
 import com.dd3boh.outertune.utils.rememberPreference
 import com.dd3boh.outertune.viewmodels.DateAgo
 import com.dd3boh.outertune.viewmodels.HistoryViewModel
+import com.zionhuang.innertube.utils.parseCookieString
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
@@ -97,15 +109,17 @@ fun HistoryScreen(
 ) {
     val database = LocalDatabase.current
     val density = LocalDensity.current
+    val context = LocalContext.current
     val menuState = LocalMenuState.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val isPlaying by playerConnection.isPlaying.collectAsState()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
 
     val swipeEnabled by rememberPreference(SwipeToQueueKey, true)
-    val snackbarHostState = LocalSnackbarHostState.current
-    val queueLocalHistoryPrefix = stringResource(R.string.queue_local_history)
 
+    val snackbarHostState = LocalSnackbarHostState.current
+
+    val historySource by viewModel.historySource.collectAsState()
     var isSearching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue())
@@ -147,13 +161,20 @@ fun HistoryScreen(
         BackHandler(onBack = onExitSelectionMode)
     }
 
-    @Composable
+    // no multiselect for remote hisory (yet)
+    val historyPage by viewModel.historyPage
+
+    val innerTubeCookie by rememberPreference(InnerTubeCookieKey, "")
+    val isLoggedIn = remember(innerTubeCookie) {
+        "SAPISID" in parseCookieString(innerTubeCookie)
+    }
+
     fun dateAgoToString(dateAgo: DateAgo): String {
         return when (dateAgo) {
-            DateAgo.Today -> stringResource(R.string.today)
-            DateAgo.Yesterday -> stringResource(R.string.yesterday)
-            DateAgo.ThisWeek -> stringResource(R.string.this_week)
-            DateAgo.LastWeek -> stringResource(R.string.last_week)
+            DateAgo.Today -> context.getString(R.string.today)
+            DateAgo.Yesterday -> context.getString(R.string.yesterday)
+            DateAgo.ThisWeek -> context.getString(R.string.this_week)
+            DateAgo.LastWeek -> context.getString(R.string.last_week)
             is DateAgo.Other -> dateAgo.date.format(DateTimeFormatter.ofPattern("yyyy/MM"))
         }
     }
@@ -244,58 +265,161 @@ fun HistoryScreen(
                 Spacer(Modifier.height(1.dp)) // for Compose ui 1.8
             }
 
-            filteredEventsMap.forEach { (dateAgo, eventsGroup) ->
-                stickyHeader {
-                    NavigationTitle(
-                        title = dateAgoToString(dateAgo),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surface)
-                    )
-                }
+            item {
+                ChipsRow(
+                    chips = if (isLoggedIn) listOf(
+                        HistorySource.LOCAL to stringResource(R.string.local_history),
+                        HistorySource.REMOTE to stringResource(R.string.remote_history),
+                    ) else {
+                        listOf(HistorySource.LOCAL to stringResource(R.string.local_history))
+                    },
+                    currentValue = historySource,
+                    onValueUpdate = {
+                        viewModel.historySource.value = it
+                        if (it == HistorySource.REMOTE) {
+                            viewModel.fetchRemoteHistory()
+                        }
+                    }
+                )
+            }
 
-                val thumbnailSize = (ListThumbnailSize.value * density.density).roundToInt()
-                itemsIndexed(
-                    items = eventsGroup,
-                ) { index, event ->
-                    val dateAgoText = dateAgoToString(dateAgo)
-                    SongListItem(
-                        song = event.song,
-                        navController = navController,
-                        snackbarHostState = snackbarHostState,
+            if (historySource == HistorySource.REMOTE && isLoggedIn) {
+                historyPage?.sections?.forEach { section ->
+                    stickyHeader {
+                        NavigationTitle(
+                            title = section.title,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.background)
+                        )
+                    }
 
-                        isActive = event.song.id == mediaMetadata?.id,
-                        isPlaying = isPlaying,
-                        inSelectMode = inSelectMode,
-                        isSelected = selection.contains(event.event.id),
-                        onSelectedChange = {
-                            inSelectMode = true
-                            if (it) {
-                                selection.add(event.event.id)
-                            } else {
-                                selection.remove(event.event.id)
-                            }
-                        },
-                        swipeEnabled = swipeEnabled,
+                    items(
+                        items = section.songs,
+                        key = { it.id }
+                    ) { song ->
+                        val content: @Composable () -> Unit = {
+                            YouTubeListItem(
+                                item = song,
+                                isActive = song.id == mediaMetadata?.id,
+                                isPlaying = isPlaying,
+                                trailingContent = {
+                                    IconButton(
+                                        onClick = {
+                                            menuState.show {
+                                                YouTubeSongMenu(
+                                                    song = song,
+                                                    navController = navController,
+                                                    onDismiss = menuState::dismiss
+                                                )
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.MoreVert,
+                                            contentDescription = null
+                                        )
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .combinedClickable(
+                                        onClick = {
+                                            if (song.id == mediaMetadata?.id) {
+                                                playerConnection.player.togglePlayPause()
+                                            } else {
+                                                playerConnection.playQueue(
+                                                    ListQueue(
+                                                        title = context.getString(R.string.queue_remote_history),
+                                                        items = section.songs.map { it.toMediaMetadata() }
+                                                    )
+                                                )
+                                            }
+                                        },
+                                        onLongClick = {
 
-                        thumbnailSize = thumbnailSize,
-                        onPlay = {
-                            if (event.song.id == mediaMetadata?.id) {
-                                playerConnection.player.togglePlayPause()
-                            } else {
-                                playerConnection.playQueue(
-                                    ListQueue(
-                                        title = "$queueLocalHistoryPrefix: $dateAgoText",
-                                        items = eventsGroup.map { it.song.toMediaMetadata() },
-                                        startIndex = index
+                                            menuState.show {
+                                                YouTubeSongMenu(
+                                                    song = song,
+                                                    navController = navController,
+                                                    onDismiss = menuState::dismiss
+                                                )
+                                            }
+
+                                        }
                                     )
-                                )
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .animateItem()
-                    )
+                                    .animateItem()
+                            )
+                        }
+
+
+
+                        SwipeToQueueBox(
+                            item = song.toMediaItem(),
+                            swipeEnabled = swipeEnabled,
+                            snackbarHostState = snackbarHostState,
+                            content = { content() },
+                        )
+
+                    }
+                }
+            } else {
+                filteredEventsMap.forEach { (dateAgo, eventsGroup) ->
+                    stickyHeader {
+                        NavigationTitle(
+                            title = dateAgoToString(dateAgo),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surface)
+                        )
+                    }
+
+                    val thumbnailSize = (ListThumbnailSize.value * density.density).roundToInt()
+                    itemsIndexed(
+                        items = eventsGroup,
+                    ) { index, event ->
+                        SongListItem(
+                            song = event.song,
+                            navController = navController,
+                            snackbarHostState = snackbarHostState,
+
+                            isActive = event.song.id == mediaMetadata?.id,
+                            isPlaying = isPlaying,
+                            inSelectMode = inSelectMode,
+                            isSelected = selection.contains(event.event.id),
+                            onSelectedChange = {
+                                inSelectMode = true
+                                if (it) {
+                                    selection.add(event.event.id)
+                                } else {
+                                    selection.remove(event.event.id)
+                                }
+                            },
+                            swipeEnabled = swipeEnabled,
+
+                            thumbnailSize = thumbnailSize,
+                            onPlay = {
+                                if (event.song.id == mediaMetadata?.id) {
+                                    playerConnection.player.togglePlayPause()
+                                } else {
+                                    playerConnection.playQueue(
+                                        ListQueue(
+                                            title = "${context.getString(R.string.queue_local_history)}: ${
+                                                dateAgoToString(
+                                                    dateAgo
+                                                )
+                                            }",
+                                            items = eventsGroup.map { it.song.toMediaMetadata() },
+                                            startIndex = index
+                                        )
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .animateItem()
+                        )
+                    }
                 }
             }
         }

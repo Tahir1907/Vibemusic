@@ -53,8 +53,11 @@ import com.dd3boh.outertune.models.DirectoryTree
 import com.dd3boh.outertune.ui.utils.STORAGE_ROOT
 import com.dd3boh.outertune.ui.utils.cacheDirectoryTree
 import com.dd3boh.outertune.ui.utils.getDirectoryTree
+import com.dd3boh.outertune.utils.SyncUtils
 import com.dd3boh.outertune.utils.dataStore
+import com.dd3boh.outertune.utils.reportException
 import com.dd3boh.outertune.utils.scanners.LocalMediaScanner.Companion.refreshLocal
+import com.zionhuang.innertube.YouTube
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -69,6 +72,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.Duration
 import java.time.LocalDateTime
 import javax.inject.Inject
 
@@ -76,8 +80,20 @@ import javax.inject.Inject
 class LibrarySongsViewModel @Inject constructor(
     @ApplicationContext context: Context,
     private val database: MusicDatabase,
+    private val syncUtils: SyncUtils,
 ) : ViewModel() {
     val allSongs = getSyncedSongs(context, database)
+    val isSyncingRemoteLikedSongs = syncUtils.isSyncingRemoteLikedSongs
+    val isSyncingRemoteSongs = syncUtils.isSyncingRemoteSongs
+
+    fun syncLibrarySongs(bypassCd: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) { syncUtils.syncRemoteSongs(bypassCd) }
+    }
+
+    fun syncLikedSongs(bypassCd: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) { syncUtils.syncRemoteLikedSongs(bypassCd) }
+    }
+
     private fun getSyncedSongs(context: Context, database: MusicDatabase): StateFlow<List<Song>?> {
 
         return context.dataStore.data
@@ -152,7 +168,10 @@ class LibraryFoldersViewModel @Inject constructor(
 class LibraryArtistsViewModel @Inject constructor(
     @ApplicationContext context: Context,
     database: MusicDatabase,
+    private val syncUtils: SyncUtils,
 ) : ViewModel() {
+    val isSyncingRemoteArtists = syncUtils.isSyncingRemoteArtists
+
     val allArtists = context.dataStore.data
         .map {
             Triple(
@@ -166,13 +185,42 @@ class LibraryArtistsViewModel @Inject constructor(
             database.artists(filter, sortType, descending)
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
+
+    fun syncArtists(bypassCd: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) { syncUtils.syncRemoteArtists(bypassCd) }
+    }
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            allArtists.collect { artists ->
+                artists
+                    ?.map { it.artist }
+                    ?.filter {
+                        it.thumbnailUrl == null || Duration.between(
+                            it.lastUpdateTime,
+                            LocalDateTime.now()
+                        ) > Duration.ofDays(10)
+                    }
+                    ?.forEach { artist ->
+                        YouTube.artist(artist.id).onSuccess { artistPage ->
+                            database.query {
+                                update(artist, artistPage)
+                            }
+                        }
+                    }
+            }
+        }
+    }
 }
 
 @HiltViewModel
 class LibraryAlbumsViewModel @Inject constructor(
     @ApplicationContext context: Context,
     database: MusicDatabase,
+    private val syncUtils: SyncUtils,
 ) : ViewModel() {
+    val isSyncingRemoteAlbums = syncUtils.isSyncingRemoteAlbums
+
     val allAlbums = context.dataStore.data
         .map {
             Triple(
@@ -187,16 +235,43 @@ class LibraryAlbumsViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
+    fun syncAlbums(bypassCd: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) { syncUtils.syncRemoteAlbums(bypassCd) }
+    }
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            allAlbums.collect { albums ->
+                albums
+                    ?.filter {
+                        !it.album.isLocal && it.album.songCount == 0
+                    }?.forEach { album ->
+                        YouTube.album(album.id).onSuccess { albumPage ->
+                            database.query {
+                                update(album.album, albumPage)
+                            }
+                        }.onFailure {
+                            reportException(it)
+                            if (it.message?.contains("NOT_FOUND") == true) {
+                                database.query {
+                                    delete(album.album)
+                                }
+                            }
+                        }
+                    }
+            }
+        }
+    }
 }
 
 @HiltViewModel
 class LibraryPlaylistsViewModel @Inject constructor(
     @ApplicationContext context: Context,
-    val database: MusicDatabase,
+    database: MusicDatabase,
+    private val syncUtils: SyncUtils,
 ) : ViewModel() {
-    val TAG = "LibraryPlaylistsViewModel"
+    val isSyncingRemotePlaylists = syncUtils.isSyncingRemotePlaylists
 
-    var lastPath = MutableStateFlow("/")
     val allPlaylists = context.dataStore.data
         .map {
             Triple(
@@ -211,71 +286,8 @@ class LibraryPlaylistsViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
-    //                            Folders: Pair<path , display name>
-    // StateFlow<Pair<List<Playlist>, List<Pair<String, String>>>?>
-    val playlists = combine(allPlaylists, lastPath) { list, path ->
-        update(list, path)
-    }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = null
-        )
-    val canNavigateUp = MutableStateFlow(false)
-
-    fun navigateUp() {
-        lastPath.value = lastPath.value.substringBeforeLast("/", "/")
-        canNavigateUp.value = lastPath.value != "/"
-    }
-
-    fun update(pathFilter: String): Pair<List<Playlist>, List<Pair<String, String>>> =
-        update(allPlaylists.value, pathFilter)
-
-    fun update(newPlaylists: List<Playlist>?, pathFilter: String): Pair<List<Playlist>, List<Pair<String, String>>> {
-        var pathFilter = pathFilter.trimEnd { it == '/' }
-        if (!pathFilter.startsWith('/')) {
-            Log.w(TAG, "Invalid playlist, falling back to \"/\"")
-            pathFilter = "/"
-        }
-        Log.v(TAG, "Loading playlist with filter: $pathFilter, found ${newPlaylists?.size} total playlists")
-
-        if (newPlaylists == null) return Pair(emptyList(), emptyList())
-
-        // sorted valid paths by minimum size subdir depth
-        val folderCandidates = newPlaylists.map { playlist ->
-            Pair(
-                playlist.playlist.path,
-                playlist.playlist.path.substringAfter(pathFilter, "").count { it == '/' })
-        }
-            .filter { !it.first.substringAfter(pathFilter, "").isBlank() }
-            .sortedBy {
-                it.second
-            }
-        Log.v(TAG, "Playlists folders after filter: ${folderCandidates.joinToString()}")
-
-        // get all folders in min subdir depth
-        val minDepth = folderCandidates.firstOrNull()?.second
-        val ret = ArrayList<Pair<String, String>>()
-        if (minDepth != null) {
-            var i = 0
-            while (i < folderCandidates.size) {
-                if (folderCandidates[i].second == minDepth) {
-                    var displayName = folderCandidates[i].first.substringAfter(pathFilter)
-                    // display name comes in /name or /name/blah
-                    if (displayName.count { it == '/' } == 1 && displayName[0] == '/') {
-                        displayName = displayName.substring(1, displayName.length)
-                    }
-                    ret.add(Pair(folderCandidates[i].first, displayName))
-                } else {
-                    break
-                }
-                i++
-            }
-            Log.v(TAG, "Playlists folders final: $ret")
-        }
-        lastPath.value = pathFilter // save path to handle list modification updates
-        canNavigateUp.value = pathFilter != "/"
-        return Pair(newPlaylists.filter { it.playlist.path == pathFilter }, ret)
+    fun syncPlaylists(bypassCd: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) { syncUtils.syncRemotePlaylists(bypassCd) }
     }
 }
 
@@ -284,7 +296,15 @@ class LibraryPlaylistsViewModel @Inject constructor(
 class LibraryViewModel @Inject constructor(
     @ApplicationContext context: Context,
     database: MusicDatabase,
+    private val syncUtils: SyncUtils
 ) : ViewModel() {
+
+    val isSyncingRemoteLikedSongs = syncUtils.isSyncingRemoteLikedSongs
+    val isSyncingRemoteSongs = syncUtils.isSyncingRemoteSongs
+    val isSyncingRemoteAlbums = syncUtils.isSyncingRemoteAlbums
+    val isSyncingRemoteArtists = syncUtils.isSyncingRemoteArtists
+    val isSyncingRemotePlaylists = syncUtils.isSyncingRemotePlaylists
+
     var artists = database.artistsBookmarkedAsc().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     var albums = database.albumsLikedAsc().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     var playlists = database.playlistInLibraryAsc().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -317,6 +337,10 @@ class LibraryViewModel @Inject constructor(
             }
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    fun syncAll(bypassCd: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) { syncUtils.tryAutoSync(bypassCd) }
+    }
 }
 
 @HiltViewModel

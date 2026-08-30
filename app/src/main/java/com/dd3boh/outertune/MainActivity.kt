@@ -11,6 +11,7 @@ package com.dd3boh.outertune
 
 import android.annotation.SuppressLint
 import android.app.NotificationManager
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -43,9 +44,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -67,7 +68,9 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -93,6 +96,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
+import androidx.core.net.toUri
+import androidx.core.util.Consumer
 import androidx.core.view.WindowCompat
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavType
@@ -130,14 +135,20 @@ import com.dd3boh.outertune.ui.component.shimmer.ShimmerTheme
 import com.dd3boh.outertune.ui.menu.BottomSheetMenu
 import com.dd3boh.outertune.ui.menu.MenuState
 import com.dd3boh.outertune.ui.player.BottomSheetPlayer
+import com.dd3boh.outertune.ui.screens.AccountScreen
 import com.dd3boh.outertune.ui.screens.AlbumScreen
+import com.dd3boh.outertune.ui.screens.BrowseScreen
 import com.dd3boh.outertune.ui.screens.HistoryScreen
 import com.dd3boh.outertune.ui.screens.HomeScreen
+import com.dd3boh.outertune.ui.screens.LoginScreen
+import com.dd3boh.outertune.ui.screens.MoodAndGenresScreen
 import com.dd3boh.outertune.ui.screens.PlayerScreen
 import com.dd3boh.outertune.ui.screens.Screens
 import com.dd3boh.outertune.ui.screens.SetupWizard
 import com.dd3boh.outertune.ui.screens.StatsScreen
+import com.dd3boh.outertune.ui.screens.YouTubeBrowseScreen
 import com.dd3boh.outertune.ui.screens.artist.ArtistAlbumsScreen
+import com.dd3boh.outertune.ui.screens.artist.ArtistItemsScreen
 import com.dd3boh.outertune.ui.screens.artist.ArtistScreen
 import com.dd3boh.outertune.ui.screens.artist.ArtistSongsScreen
 import com.dd3boh.outertune.ui.screens.library.FolderScreen
@@ -149,8 +160,11 @@ import com.dd3boh.outertune.ui.screens.library.LibraryScreen
 import com.dd3boh.outertune.ui.screens.library.LibrarySongsScreen
 import com.dd3boh.outertune.ui.screens.playlist.AutoPlaylistScreen
 import com.dd3boh.outertune.ui.screens.playlist.LocalPlaylistScreen
+import com.dd3boh.outertune.ui.screens.playlist.OnlinePlaylistScreen
+import com.dd3boh.outertune.ui.screens.search.OnlineSearchResult
 import com.dd3boh.outertune.ui.screens.search.SearchBarContainer
 import com.dd3boh.outertune.ui.screens.settings.AboutScreen
+import com.dd3boh.outertune.ui.screens.settings.AccountSyncSettings
 import com.dd3boh.outertune.ui.screens.settings.AppearanceSettings
 import com.dd3boh.outertune.ui.screens.settings.AttributionScreen
 import com.dd3boh.outertune.ui.screens.settings.BackupAndRestore
@@ -166,6 +180,8 @@ import com.dd3boh.outertune.ui.screens.settings.StorageSettings
 import com.dd3boh.outertune.ui.theme.OuterTuneTheme
 import com.dd3boh.outertune.ui.utils.appBarScrollBehavior
 import com.dd3boh.outertune.utils.ActivityLauncherHelper
+import com.dd3boh.outertune.utils.NetworkConnectivityObserver
+import com.dd3boh.outertune.utils.SyncUtils
 import com.dd3boh.outertune.utils.lmScannerCoroutine
 import com.dd3boh.outertune.utils.rememberEnumPreference
 import com.dd3boh.outertune.utils.rememberPreference
@@ -184,7 +200,11 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var downloadUtil: DownloadUtil
 
+    @Inject
+    lateinit var syncUtils: SyncUtils
+
     lateinit var activityLauncher: ActivityLauncherHelper
+    lateinit var connectivityObserver: NetworkConnectivityObserver
 
     private var playerConnection by mutableStateOf<PlayerConnection?>(null)
 
@@ -202,7 +222,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         Log.i(MAIN_TAG, "onDestroy() called. isFinishing = $isFinishing")
-
+        try {
+            connectivityObserver.unregister()
+        } catch (e: UninitializedPropertyAccessException) {
+            // lol
+        }
         // https://github.com/androidx/media/issues/805
         if (Build.VERSION.SDK_INT == Build.VERSION_CODES.UPSIDE_DOWN_CAKE && (playerConnection?.player?.playWhenReady != true || playerConnection?.player?.mediaItemCount == 0)) {
             val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -280,21 +304,29 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(useDarkTheme) {
                 setSystemBarAppearance(useDarkTheme)
             }
+            try {
+                connectivityObserver.unregister()
+            } catch (e: UninitializedPropertyAccessException) {
+                // lol
+            }
+            connectivityObserver = NetworkConnectivityObserver(this@MainActivity)
+            val isNetworkConnected by connectivityObserver.networkStatus.collectAsState(true)
 
 
             OuterTuneTheme(
                 context = this@MainActivity,
                 playerConnection = playerConnection,
                 enableDynamicTheme = enableDynamicTheme,
-                highContrastCompat = highContrastCompat,
                 isSystemInDarkTheme = isSystemInDarkTheme,
                 darkTheme = useDarkTheme,
                 pureBlack = pureBlack,
+                highContrastCompat = highContrastCompat,
             ) {
                 Log.v(MAIN_TAG, "RC-2.1")
                 val density = LocalDensity.current
-                val windowsInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
+                val windowsInsets = WindowInsets.systemBars
                 val bottomInset = with(density) { windowsInsets.getBottom(density).toDp() }
+                val cutoutInsets = WindowInsets.displayCutout
 
                 val navController = rememberNavController()
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -340,7 +372,6 @@ class MainActivity : ComponentActivity() {
                         expandedBound = maxHeight,
                     )
 
-                    // Main insets for navhost content.
                     val playerAwareWindowInsets =
                         remember(
                             bottomInset,
@@ -349,10 +380,11 @@ class MainActivity : ComponentActivity() {
                             // TODO: Navbar is shown in all screens except for oobe (which doesn't use these insets). Idk what do to tbh
                             var bottom = bottomInset + if (!useNavRail) NavigationBarHeight else 0.dp
 
-                            if (!playerBottomSheetState.isDismissed) bottom += MiniPlayerHeight + MinMiniPlayerHeight
+                            if (!playerBottomSheetState.isDismissed) bottom += MiniPlayerHeight
                             if (!tabMode) {
                                 windowsInsets
                                     .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
+                                    .add(cutoutInsets.only(WindowInsetsSides.Horizontal))
                                     .add(
                                         WindowInsets(
                                             left = if (!useNavRail) 0.dp else NavigationBarHeight,
@@ -362,7 +394,7 @@ class MainActivity : ComponentActivity() {
                                     )
                             } else {
                                 windowsInsets
-                                    .only(WindowInsetsSides.Vertical + WindowInsetsSides.End)
+                                    .only(WindowInsetsSides.Top)
                                     .add(WindowInsets(top = AppBarHeight, bottom = bottom))
                             }
                         }
@@ -374,25 +406,25 @@ class MainActivity : ComponentActivity() {
                         }
                     )
 
-                    // TODO: can i use this for external file explorer media player?
-//                    DisposableEffect(Unit) {
-//                        val listener = Consumer<Intent> { intent ->
-//                            val uri =
-//                                intent.data ?: intent.extras?.getString(Intent.EXTRA_TEXT)?.toUri()
-//                                ?: return@Consumer
-//                            youtubeNavigator(
-//                                this@MainActivity,
-//                                navController,
-//                                coroutineScope,
-//                                playerConnection,
-//                                snackbarHostState,
-//                                uri
-//                            )
-//                        }
-//
-//                        addOnNewIntentListener(listener)
-//                        onDispose { removeOnNewIntentListener(listener) }
-//                    }
+
+                    DisposableEffect(Unit) {
+                        val listener = Consumer<Intent> { intent ->
+                            val uri =
+                                intent.data ?: intent.extras?.getString(Intent.EXTRA_TEXT)?.toUri()
+                                ?: return@Consumer
+                            youtubeNavigator(
+                                this@MainActivity,
+                                navController,
+                                coroutineScope,
+                                playerConnection,
+                                snackbarHostState,
+                                uri
+                            )
+                        }
+
+                        addOnNewIntentListener(listener)
+                        onDispose { removeOnNewIntentListener(listener) }
+                    }
 
                     CompositionLocalProvider(
                         LocalDatabase provides database,
@@ -402,6 +434,8 @@ class MainActivity : ComponentActivity() {
                         LocalPlayerAwareWindowInsets provides playerAwareWindowInsets,
                         LocalDownloadUtil provides downloadUtil,
                         LocalShimmerTheme provides ShimmerTheme,
+                        LocalSyncUtils provides syncUtils,
+                        LocalNetworkConnected provides isNetworkConnected,
                         LocalSnackbarHostState provides snackbarHostState,
                     ) {
                         Box(
@@ -512,11 +546,41 @@ class MainActivity : ComponentActivity() {
                                     composable("stats") {
                                         StatsScreen(navController)
                                     }
+                                    composable("mood_and_genres") {
+                                        MoodAndGenresScreen(navController, scrollBehavior)
+                                    }
+                                    composable("account") {
+                                        AccountScreen(navController, scrollBehavior)
+                                    }
 
+                                    composable(
+                                        route = "browse/{browseId}",
+                                        arguments = listOf(
+                                            navArgument("browseId") {
+                                                type = NavType.StringType
+                                            }
+                                        )
+                                    ) {
+                                        BrowseScreen(
+                                            navController,
+                                            scrollBehavior,
+                                            it.arguments?.getString("browseId")
+                                        )
+                                    }
                                     composable(
                                         route = "search",
                                     ) {
                                         SearchBarContainer(navController, scrollBehavior)
+                                    }
+                                    composable(
+                                        route = "search/{query}",
+                                        arguments = listOf(
+                                            navArgument("query") {
+                                                type = NavType.StringType
+                                            }
+                                        )
+                                    ) {
+                                        OnlineSearchResult(navController)
                                     }
                                     composable(
                                         route = "album/{albumId}",
@@ -559,6 +623,34 @@ class MainActivity : ComponentActivity() {
                                         ArtistAlbumsScreen(navController, scrollBehavior)
                                     }
                                     composable(
+                                        route = "artist/{artistId}/items?browseId={browseId}?params={params}",
+                                        arguments = listOf(
+                                            navArgument("artistId") {
+                                                type = NavType.StringType
+                                            },
+                                            navArgument("browseId") {
+                                                type = NavType.StringType
+                                                nullable = true
+                                            },
+                                            navArgument("params") {
+                                                type = NavType.StringType
+                                                nullable = true
+                                            }
+                                        )
+                                    ) {
+                                        ArtistItemsScreen(navController, scrollBehavior)
+                                    }
+                                    composable(
+                                        route = "online_playlist/{playlistId}",
+                                        arguments = listOf(
+                                            navArgument("playlistId") {
+                                                type = NavType.StringType
+                                            }
+                                        )
+                                    ) {
+                                        OnlinePlaylistScreen(navController, scrollBehavior)
+                                    }
+                                    composable(
                                         route = "local_playlist/{playlistId}",
                                         arguments = listOf(
                                             navArgument("playlistId") {
@@ -578,6 +670,21 @@ class MainActivity : ComponentActivity() {
                                     ) {
                                         AutoPlaylistScreen(navController, scrollBehavior)
                                     }
+                                    composable(
+                                        route = "youtube_browse/{browseId}?params={params}",
+                                        arguments = listOf(
+                                            navArgument("browseId") {
+                                                type = NavType.StringType
+                                                nullable = true
+                                            },
+                                            navArgument("params") {
+                                                type = NavType.StringType
+                                                nullable = true
+                                            }
+                                        )
+                                    ) {
+                                        YouTubeBrowseScreen(navController, scrollBehavior)
+                                    }
                                     composable("settings") {
                                         SettingsScreen(navController, scrollBehavior)
                                     }
@@ -592,6 +699,9 @@ class MainActivity : ComponentActivity() {
                                     }
                                     composable("settings/library/lyrics") {
                                         LyricsSettings(navController, scrollBehavior)
+                                    }
+                                    composable("settings/account_sync") {
+                                        AccountSyncSettings(navController, scrollBehavior)
                                     }
                                     composable("settings/player") {
                                         PlayerSettings(navController, scrollBehavior)
@@ -616,6 +726,9 @@ class MainActivity : ComponentActivity() {
                                     }
                                     composable("settings/about/oss_licenses") {
                                         LibrariesScreen(navController, scrollBehavior)
+                                    }
+                                    composable("login") {
+                                        LoginScreen(navController)
                                     }
 
                                     composable("setup_wizard") {
@@ -820,7 +933,7 @@ class MainActivity : ComponentActivity() {
 
                                 SearchBarContainer(navController, scrollBehavior)
 
-                                if (oobeStatus == OOBE_VERSION) {
+                                if (oobeStatus >= OOBE_VERSION) {
                                     if (!navigationItems.contains(Screens.Player)) {
                                         BottomSheetPlayer(
                                             state = playerBottomSheetState,
@@ -849,16 +962,14 @@ class MainActivity : ComponentActivity() {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxSize()
+                                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                                 ) {
                                     Box(
                                         modifier = Modifier
                                             .width(playerW.dp)
                                     ) {
-                                        if (oobeStatus == OOBE_VERSION && !navigationItems.contains(Screens.Player)) {
-                                            PlayerScreen(
-                                                navController = navController,
-                                                windowInsets = windowsInsets.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical),
-                                            )
+                                        if (oobeStatus >= OOBE_VERSION && !navigationItems.contains(Screens.Player)) {
+                                            PlayerScreen(navController)
                                         }
                                     }
 
@@ -868,13 +979,9 @@ class MainActivity : ComponentActivity() {
                                     ) {
                                         navHost()
 
-                                        SearchBarContainer(
-                                            navController = navController,
-                                            scrollBehavior = scrollBehavior,
-                                            windowInsets = windowsInsets.only(WindowInsetsSides.Top)
-                                        )
+                                        SearchBarContainer(navController, scrollBehavior)
 
-                                        if (oobeStatus == OOBE_VERSION) {
+                                        if (oobeStatus >= OOBE_VERSION) {
                                             navbar()
                                         }
                                         bottomSheetMenu()
@@ -892,7 +999,7 @@ class MainActivity : ComponentActivity() {
 
                             // Setup wizard
                             LaunchedEffect(Unit) {
-                                if (oobeStatus != OOBE_VERSION) {
+                                if (oobeStatus < OOBE_VERSION) {
                                     navController.navigate("setup_wizard")
                                 }
                             }
@@ -956,4 +1063,6 @@ val LocalMenuState = staticCompositionLocalOf<MenuState> { error("No menu state 
 val LocalPlayerConnection = staticCompositionLocalOf<PlayerConnection?> { error("No PlayerConnection provided") }
 val LocalPlayerAwareWindowInsets = compositionLocalOf<WindowInsets> { error("No player WindowInsets provided") }
 val LocalDownloadUtil = staticCompositionLocalOf<DownloadUtil> { error("No DownloadUtil provided") }
+val LocalSyncUtils = staticCompositionLocalOf<SyncUtils> { error("No SyncUtils provided") }
+val LocalNetworkConnected = staticCompositionLocalOf<Boolean> { error("No Network Status provided") }
 val LocalSnackbarHostState = staticCompositionLocalOf<SnackbarHostState> { error("No SnackbarHostState provided") }

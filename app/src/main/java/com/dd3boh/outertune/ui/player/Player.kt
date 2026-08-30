@@ -33,13 +33,11 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -49,7 +47,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -58,7 +55,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.MoreVert
@@ -68,6 +65,7 @@ import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.Slider
@@ -75,7 +73,6 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -100,7 +97,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -123,8 +119,6 @@ import com.dd3boh.outertune.R
 import com.dd3boh.outertune.constants.DEFAULT_PLAYER_BACKGROUND
 import com.dd3boh.outertune.constants.DarkMode
 import com.dd3boh.outertune.constants.DarkModeKey
-import com.dd3boh.outertune.constants.KeepScreenOn
-import com.dd3boh.outertune.constants.KeepScreenOnKey
 import com.dd3boh.outertune.constants.PlayerBackgroundStyle
 import com.dd3boh.outertune.constants.PlayerBackgroundStyleKey
 import com.dd3boh.outertune.constants.PlayerHorizontalPadding
@@ -144,6 +138,7 @@ import com.dd3boh.outertune.playback.QueueBoard
 import com.dd3boh.outertune.ui.component.BottomSheet
 import com.dd3boh.outertune.ui.component.BottomSheetState
 import com.dd3boh.outertune.ui.component.PlayerSliderTrack
+import com.dd3boh.outertune.ui.component.button.IconButton
 import com.dd3boh.outertune.ui.component.button.ResizableIconButton
 import com.dd3boh.outertune.ui.component.collapsedAnchor
 import com.dd3boh.outertune.ui.component.dismissedAnchor
@@ -172,7 +167,6 @@ fun BottomSheetPlayer(
     Log.v(TAG, "PLR-1")
 
     val context = LocalContext.current
-    val currentView = LocalView.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val queueBoard by playerConnection.service.queueBoard.collectAsState()
 
@@ -187,10 +181,6 @@ fun BottomSheetPlayer(
         if (darkTheme == DarkMode.AUTO) isSystemInDarkTheme else darkTheme == DarkMode.ON
     }
 
-    val keepScreenOn by rememberEnumPreference(
-        key = KeepScreenOnKey,
-        defaultValue = KeepScreenOn.LYRICS
-    )
     val showLyrics by rememberPreference(ShowLyricsKey, defaultValue = false)
 
     val qbInit by playerConnection.service.qbInit.collectAsState()
@@ -225,15 +215,6 @@ fun BottomSheetPlayer(
     ) {
         Log.v(TAG, "PLR-3.0")
 
-        val isPlaying by playerConnection.isPlaying.collectAsState()
-
-        DisposableEffect(isPlaying, keepScreenOn) {
-            currentView.keepScreenOn = isPlaying && keepScreenOn == KeepScreenOn.PLAYER
-            onDispose {
-                currentView.keepScreenOn = false
-            }
-        }
-
         if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE && !context.tabMode() && context.supportsWideScreen()) {
             LandscapePlayer(state, navController, queueBoard)
         } else {
@@ -249,7 +230,6 @@ fun PortraitPlayer(
     navController: NavController,
     queueBoard: QueueBoard,
     enableQueueSheet: Boolean = true,
-    windowInsets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
 ) {
     val TAG = "BottomSheetPlayer"
     Log.v(TAG, "PLR-3.1b")
@@ -390,8 +370,7 @@ fun PortraitPlayer(
                 playerSheetState.dismiss()
                 queueBoard.detachedHead = false
             },
-            navController = navController,
-            windowInsets = windowInsets,
+            navController = navController
         )
     }
 }
@@ -403,7 +382,6 @@ fun LandscapePlayer(
     navController: NavController,
     queueBoard: QueueBoard,
     enableQueueSheet: Boolean = true,
-    windowInsets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
 ) {
     val TAG = "BottomSheetPlayer"
 
@@ -577,6 +555,7 @@ fun ActionButtons(
     val menuState = LocalMenuState.current
 
 
+    val currentSong by playerConnection.currentSong.collectAsState(initial = null)
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
 
     Spacer(modifier = Modifier.width(10.dp))
@@ -589,7 +568,7 @@ fun ActionButtons(
             .background(MaterialTheme.colorScheme.primary)
     ) {
         ResizableIconButton(
-            icon = if (mediaMetadata?.liked == true) R.drawable.favorite else R.drawable.favorite_border,
+            icon = if (currentSong?.song?.liked == true) R.drawable.favorite else R.drawable.favorite_border,
             color = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier
                 .align(Alignment.Center)
@@ -718,28 +697,6 @@ fun ControlsContent(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            val queueHint: @Composable RowScope.() -> Unit = {
-                Box(
-                    modifier = Modifier
-                        .offset(y = 5.dp)
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(MaterialTheme.colorScheme.primary)
-                ) {
-                    ResizableIconButton(
-                        icon = Icons.AutoMirrored.Rounded.QueueMusic,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .size(24.dp),
-                        onClick = {
-                            queueSheetState.expandSoft()
-                            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                        }
-                    )
-                }
-            }
-
             // action buttons for landscape (above title)
             if (compactWidth) {
                 Row(
@@ -750,10 +707,6 @@ fun ControlsContent(
                         .padding(start = PlayerHorizontalPadding, end = PlayerHorizontalPadding, bottom = 16.dp)
                 ) {
                     ActionButtons(playerSheetState, navController)
-                    if (showQueueHint) {
-                        Spacer(modifier = Modifier.width(7.dp))
-                        queueHint()
-                    }
                 }
             }
 
@@ -820,10 +773,6 @@ fun ControlsContent(
                     // action buttons for portrait (inline with title)
                     if (!compactWidth) {
                         ActionButtons(playerSheetState, navController)
-                        if (showQueueHint) {
-                            Spacer(modifier = Modifier.width(7.dp))
-                            queueHint()
-                        }
                     }
                 }
             }
@@ -1001,9 +950,6 @@ fun ControlsContent(
                             .align(Alignment.Center),
                         color = onBackgroundColor,
                         onClick = {
-                            if (playerConnection.player.currentMediaItem == null) {
-                                queueBoard.setCurrQueue()
-                            }
                             playerConnection.player.seekToNext()
                             haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
                         }
@@ -1032,6 +978,34 @@ fun ControlsContent(
                 }
             }
 
+            // queue hint for landscape
+            if (showQueueHint) {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .height(QueuePeekHeight)
+                        .fillMaxWidth()
+                        .clickable(
+                            onClick = {
+                                queueSheetState.expandSoft()
+                                haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                            }
+                        )
+                ) {
+                    IconButton(onClick = {
+                        queueSheetState.expandSoft()
+                        haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    }) {
+                        Icon(
+                            imageVector = Icons.Rounded.ExpandLess,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            contentDescription = null,
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -39,7 +39,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.akanework.gramophone.logic.utils.SemanticLyrics
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -60,7 +59,10 @@ class PlayerConnection(
         playWhenReady && playbackState != STATE_ENDED
     }.stateIn(scope, SharingStarted.Lazily, player.playWhenReady && player.playbackState != STATE_ENDED)
     val waitingForNetworkConnection: StateFlow<Boolean> = service.waitingForNetworkConnection.asStateFlow()
-    val mediaMetadata = MutableStateFlow(player.currentMetadata?: runBlocking {   database.getResumptionQueue()?.getCurrentSong()})
+    val mediaMetadata = MutableStateFlow(player.currentMetadata)
+    val currentSong = mediaMetadata.flatMapLatest {
+        database.song(it?.id)
+    }
     val currentLyrics: Flow<SemanticLyrics> = mediaMetadata.flatMapLatest { mediaMetadata ->
         if (mediaMetadata != null) {
             return@flatMapLatest flowOf(service.lyricsHelper.getLyrics(mediaMetadata) ?: uninitializedLyric)
@@ -73,6 +75,7 @@ class PlayerConnection(
 
     val queueWindows = MutableStateFlow<List<Timeline.Window>>(emptyList())
 
+    var queuePlaylistId = MutableStateFlow<String?>(null)
     val currentWindowIndex = MutableStateFlow(-1)
 
     val shuffleModeEnabled = MutableStateFlow(false)
@@ -88,6 +91,7 @@ class PlayerConnection(
 
         playbackState.value = player.playbackState
         playWhenReady.value = player.playWhenReady
+        queuePlaylistId.value = service.queuePlaylistId
         queueWindows.value = player.getQueueWindows()
         currentWindowIndex.value = player.getCurrentQueueIndex()
         currentMediaItemIndex.value = player.currentMediaItemIndex
@@ -165,6 +169,7 @@ class PlayerConnection(
 
     override fun onTimelineChanged(timeline: Timeline, reason: Int) {
         queueWindows.value = player.getQueueWindows()
+        queuePlaylistId.value = service.queuePlaylistId
         currentMediaItemIndex.value = player.currentMediaItemIndex
         currentWindowIndex.value = player.getCurrentQueueIndex()
         updateCanSkipPreviousAndNext()

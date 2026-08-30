@@ -1,11 +1,13 @@
 package com.dd3boh.outertune.ui.menu
 
+import android.content.Intent
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -17,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.dd3boh.outertune.LocalDatabase
+import com.dd3boh.outertune.LocalNetworkConnected
 import com.dd3boh.outertune.LocalPlayerConnection
 import com.dd3boh.outertune.R
 import com.dd3boh.outertune.constants.ArtistSongSortType
@@ -25,6 +28,7 @@ import com.dd3boh.outertune.models.toMediaMetadata
 import com.dd3boh.outertune.playback.queues.ListQueue
 import com.dd3boh.outertune.ui.component.button.IconButton
 import com.dd3boh.outertune.ui.component.items.ArtistListItem
+import com.zionhuang.innertube.YouTube
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -40,6 +44,7 @@ fun ArtistMenu(
     val context = LocalContext.current
     val database = LocalDatabase.current
     val playerConnection = LocalPlayerConnection.current ?: return
+    val isNetworkConnected = LocalNetworkConnected.current
     val artistState = database.artist(originalArtist.id).collectAsState(initial = originalArtist)
     val artist = artistState.value ?: originalArtist
 
@@ -84,10 +89,15 @@ fun ArtistMenu(
                             .map { it.toMediaMetadata() }
                     }
 
+                    val playlistId = withContext(Dispatchers.IO) {
+                        YouTube.artist(artist.id).getOrNull()?.artist?.shuffleEndpoint?.playlistId
+                    }
+
                     playerConnection.playQueue(
                         ListQueue(
                             title = artist.artist.name,
                             items = songs,
+                            playlistId = playlistId
                         )
                     )
                 }
@@ -104,14 +114,33 @@ fun ArtistMenu(
                             .shuffled()
                     }
 
+                    val playlistId = withContext(Dispatchers.IO) {
+                        YouTube.artist(artist.id).getOrNull()?.artist?.shuffleEndpoint?.playlistId
+                    }
+
                     playerConnection.playQueue(
                         ListQueue(
                             title = artist.artist.name,
                             items = songs,
+                            playlistId = playlistId
                         )
                     )
                 }
                 onDismiss()
+            }
+        }
+        if (artist.artist.isYouTubeArtist) {
+            GridMenuItem(
+                icon = Icons.Rounded.Share,
+                title = R.string.share
+            ) {
+                onDismiss()
+                val intent = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, "https://music.youtube.com/channel/${artist.id}")
+                }
+                context.startActivity(Intent.createChooser(intent, null))
             }
         }
     }

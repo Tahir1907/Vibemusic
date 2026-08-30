@@ -53,10 +53,10 @@ fun OuterTuneTheme(
     context: Context,
     playerConnection: PlayerConnection?,
     enableDynamicTheme: Boolean,
-    highContrastCompat: Boolean,
     isSystemInDarkTheme: Boolean,
     darkTheme: Boolean = isSystemInDarkTheme(),
     pureBlack: Boolean = false,
+    highContrastCompat: Boolean,
     content: @Composable () -> Unit,
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -71,40 +71,42 @@ fun OuterTuneTheme(
             themeColor = DefaultThemeColor
             return@LaunchedEffect
         }
-        playerConnection.service.currentMediaMetadata.collectLatest { song ->
-            coroutineScope.launch(coilCoroutine) {
-                var ret = DefaultThemeColor
-                if (song != null) {
-                    val uri = (if (song.isLocal) song.localPath else song.thumbnailUrl)?.toUri()
-                    if (uri != null) {
-                        val model = if (uri.toString().startsWith("/storage/")) {
-                            LocalArtworkPath(uri.toString(), 100, 100)
-                        } else {
-                            uri
+                playerConnection.service.currentMediaMetadata.collectLatest { song ->
+                    coroutineScope.launch(coilCoroutine) {
+                        var ret = DefaultThemeColor
+                        if (song != null) {
+                            val uri = (if (song.isLocal) song.localPath else song.thumbnailUrl)?.toUri()
+                            if (uri != null) {
+                                val model = if (uri.toString().startsWith("/storage/")) {
+                                    LocalArtworkPath(uri.toString(), 100, 100)
+                                } else {
+                                    uri
+                                }
+
+                                val result = context.imageLoader.execute(
+                                    ImageRequest.Builder(context)
+                                        .data(model)
+                                        .allowHardware(false)
+                                        .build()
+                                )
+
+                                ret = result.image?.toBitmap()?.extractThemeColor() ?: DefaultThemeColor
+                            }
                         }
-
-                        val result = context.imageLoader.execute(
-                            ImageRequest.Builder(context)
-                                .data(model)
-                                .allowHardware(false)
-                                .build()
-                        )
-
-                        ret = result.image?.toBitmap()?.extractThemeColor() ?: DefaultThemeColor
+                        themeColor = ret
                     }
                 }
-                themeColor = ret
-            }
-        }
     }
 
+
     val colorScheme = remember(darkTheme, pureBlack, themeColor) {
-        if (themeColor == DefaultThemeColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+       if (themeColor == DefaultThemeColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val systemTheme = if (darkTheme) {
                 dynamicDarkColorScheme(context).pureBlack(pureBlack)
             } else {
                 dynamicLightColorScheme(context)
             }
+
 
             // when high contrast mode Android collapses all accent colours into (more or less) one shade. We use
             // secondaryContainer and onSecondaryContainer weirdly in several places in terms of theming so just replace

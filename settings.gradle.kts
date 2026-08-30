@@ -9,9 +9,14 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Vibemusic"
+rootProject.name = "OuterTune"
 include(":app")
+include(":innertube")
+include(":kugou")
+include(":lrclib")
 include(":material-color-utilities")
+include(":ffMetadataEx")
+include(":taglib")
 
 // Use a local copy of NewPipe Extractor by uncommenting the lines below.
 // We assume, that OuterTune and NewPipe Extractor have the same parent directory.
@@ -27,18 +32,6 @@ include(":material-color-utilities")
 //includeBuild("../NewPipeExtractor") {
 //    dependencySubstitution {
 //        substitute(module("com.github.teamnewpipe:NewPipeExtractor")).using(project(":extractor"))
-//    }
-//}
-
-
-// From:
-//      add("fullImplementation", files("../prebuilt/ffMetadataEx-release.aar"))
-// To:
-//       add("fullImplementation", "wah.mikooomich:ffmetadataex")
-
-//includeBuild("../ffMetadataEx") {
-//    dependencySubstitution {
-//        substitute(module("wah.mikooomich:ffmetadataex")).using(project(":ffMetadataEx"))
 //    }
 //}
 

@@ -22,15 +22,15 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.vibemusic.app"
+    namespace = "com.dd3boh.outertune"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.vibemusic.app"
+        applicationId = "com.dd3boh.outertune"
         minSdk = 24
         targetSdk = 36
         versionCode = 71
-        versionName = "0.11.0-a2"
+        versionName = "0.10.2-b1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -112,7 +112,7 @@ android {
         variant.outputs
             .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
             .forEach { output ->
-                var outputFileName = "VibeMusic-${variant.versionName}-${output.baseName}-${output.versionCode}.apk"
+                var outputFileName = "OuterTune-${variant.versionName}-${output.baseName}-${output.versionCode}.apk"
                 output.outputFileName = outputFileName
             }
     }
@@ -160,7 +160,7 @@ android {
             // Define the strict mode, will fail if the project uses licenses not allowed
             strictMode = com.mikepenz.aboutlibraries.plugin.StrictMode.FAIL
             // Allowed set of licenses, this project will be able to use without build failure
-            allowedLicenses.addAll("Apache-2.0", "BSD-3-Clause", "GNU LESSER GENERAL PUBLIC LICENSE, Version 2.1", "GPL-3.0-only", "EPL-2.0", "MIT", "MPL-2.0", "Public Domain")
+            allowedLicenses.addAll("Apache-2.0", "BSD-3-Clause", "GNU LESSER GENERAL PUBLIC LICENSE, Version 2.1", "GNU GENERAL PUBLIC LICENSE, Version 3", "GPL-3.0-only", "EPL-2.0", "MIT", "MPL-2.0", "Public Domain")
 
             // Full license text for license IDs mentioned here will be included, even if no detected dependency uses them.
              additionalLicenses.addAll("apache_2_0", "gpl_2_1") // taglib, ffMpeg in ffMetadataEx
@@ -219,6 +219,7 @@ dependencies {
 
     // ui
     implementation(libs.coil)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.lazycolumnscrollbar)
     implementation(libs.shimmer)
 
@@ -232,7 +233,9 @@ dependencies {
     implementation(libs.viewmodel.compose)
 
     implementation(libs.media3)
+    implementation(libs.media3.okhttp)
     implementation(libs.media3.session)
+    implementation(libs.media3.workmanager)
 
     implementation(libs.room.runtime)
     ksp(libs.room.compiler)
@@ -245,17 +248,26 @@ dependencies {
 
     coreLibraryDesugaring(libs.desugaring)
 
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.serialization.json)
+
+    // modules
+    implementation(project(":innertube"))
+    implementation(project(":kugou"))
+    implementation(project(":lrclib"))
+    implementation(project(":material-color-utilities"))
+    implementation(project(":taglib"))
+
     // misc
     implementation(libs.aboutlibraries.compose.m3)
 
-    // modules
-    implementation(project(":material-color-utilities"))
-
+    // sdk24 support
+    // Support for N is officially unsupported even it the app should still work. Leave this outside of the version catalog.
+    implementation("androidx.webkit:webkit:1.14.0")
 }
 
 afterEvaluate {
     dependencies {
-//        add("fullImplementation", "wah.mikooomich:ffmetadataex")
-        add("fullImplementation", files("../prebuilt/ffMetadataEx-release.aar"))
+        add("fullImplementation", project(":ffMetadataEx"))
     }
 }

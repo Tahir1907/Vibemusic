@@ -6,6 +6,11 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.dd3boh.outertune.utils.LocalArtworkPath
+import com.dd3boh.outertune.utils.syncCoroutine
+import com.zionhuang.innertube.YouTube
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.apache.commons.lang3.RandomStringUtils
 import java.time.LocalDateTime
 import java.time.Month
@@ -27,7 +32,7 @@ data class SongEntity(
     val thumbnailUrl: String? = null,
     val inLibrary: LocalDateTime? = null, // doubles as "date added"
     @ColumnInfo(name = "isLocal", defaultValue = false.toString())
-    val isLocal: Boolean = false, //  keep this, required for downladed songs
+    val isLocal: Boolean = false,
     @ColumnInfo(index = true)
     val localPath: String?,
     val dateDownload: LocalDateTime? = null, // doubles as "isDownloaded" for new downloader system
@@ -35,7 +40,6 @@ data class SongEntity(
     val likedDate: LocalDateTime? = null,
 
     // misc non-critical tags
-    val acoustid: String? = null,
     val trackNumber: Int? = null,
     val discNumber: Int? = null,
     val albumId: String? = null,
@@ -46,11 +50,21 @@ data class SongEntity(
     val dateModified: LocalDateTime? = null, // file property
 ) {
 
+    fun localToggleLike() = copy(
+        liked = !liked,
+        likedDate = if (!liked) LocalDateTime.now() else null,
+    )
+
     fun toggleLike() = copy(
         liked = !liked,
         likedDate = if (!liked) LocalDateTime.now() else null,
         inLibrary = if (!liked) inLibrary ?: LocalDateTime.now() else inLibrary
-    )
+    ).also {
+        CoroutineScope(syncCoroutine).launch {
+            YouTube.likeVideo(id, !liked)
+            this.cancel()
+        }
+    }
 
     fun toggleLibrary() = copy(
         inLibrary = if (inLibrary == null) LocalDateTime.now() else null,
@@ -89,7 +103,11 @@ data class SongEntity(
     fun getDateModifiedLong(): Long? = dateModified?.toEpochSecond(ZoneOffset.UTC)
 
     fun getThumbnailModel(sizeX: Int = -1, sizeY: Int = -1): Any? {
-        return LocalArtworkPath(thumbnailUrl ?: localPath, sizeX, sizeY)
+        return if (isLocal) {
+            LocalArtworkPath(thumbnailUrl ?: localPath, sizeX, sizeY)
+        } else {
+            thumbnailUrl
+        }
     }
 
     companion object {

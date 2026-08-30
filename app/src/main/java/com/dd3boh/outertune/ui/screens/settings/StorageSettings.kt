@@ -37,6 +37,7 @@ import com.dd3boh.outertune.ui.component.ColumnWithContentPadding
 import com.dd3boh.outertune.ui.component.PreferenceGroupTitle
 import com.dd3boh.outertune.ui.component.button.IconButton
 import com.dd3boh.outertune.ui.screens.settings.fragments.DownloadsFrag
+import com.dd3boh.outertune.ui.screens.settings.fragments.ImageCacheFrag
 import com.dd3boh.outertune.ui.screens.settings.fragments.SongCacheFrag
 import com.dd3boh.outertune.ui.utils.backToMain
 
@@ -77,6 +78,16 @@ fun StorageSettings(
             SongCacheFrag()
         }
         Spacer(modifier = Modifier.height(16.dp))
+
+        PreferenceGroupTitle(
+            title = stringResource(R.string.image_cache)
+        )
+
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            ImageCacheFrag()
+        }
     }
 
     TopAppBar(

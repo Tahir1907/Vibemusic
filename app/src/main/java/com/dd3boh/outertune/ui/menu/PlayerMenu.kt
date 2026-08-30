@@ -29,6 +29,8 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.AddCircleOutline
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.LibraryAdd
+import androidx.compose.material.icons.rounded.LibraryAddCheck
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.MoreTime
 import androidx.compose.material.icons.rounded.Radio
@@ -78,6 +80,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastSumBy
 import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.PlaybackParameters
+import androidx.media3.exoplayer.offline.DownloadService
 import androidx.navigation.NavController
 import com.dd3boh.outertune.LocalDatabase
 import com.dd3boh.outertune.LocalDownloadUtil
@@ -85,6 +88,8 @@ import com.dd3boh.outertune.LocalPlayerConnection
 import com.dd3boh.outertune.R
 import com.dd3boh.outertune.constants.ShowLyricsKey
 import com.dd3boh.outertune.models.MediaMetadata
+import com.dd3boh.outertune.playback.ExoDownloadService
+import com.dd3boh.outertune.playback.queues.YouTubeQueue
 import com.dd3boh.outertune.ui.component.BigSeekBar
 import com.dd3boh.outertune.ui.component.BottomSheetState
 import com.dd3boh.outertune.ui.component.button.IconButton
@@ -93,6 +98,7 @@ import com.dd3boh.outertune.ui.dialog.AddToQueueDialog
 import com.dd3boh.outertune.ui.dialog.ArtistDialog
 import com.dd3boh.outertune.ui.dialog.DetailsDialog
 import com.dd3boh.outertune.utils.rememberPreference
+import com.zionhuang.innertube.YouTube
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -110,7 +116,6 @@ import kotlin.math.round
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Suppress("NonObservableLocale")
 @Composable
 fun PlayerMenu(
     mediaMetadata: MediaMetadata?,
@@ -412,13 +417,12 @@ fun PlayerMenu(
             bottom = 8.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()
         )
     ) {
-        // TODO: local library radio playback
         if (!mediaMetadata.isLocal)
             GridMenuItem(
                 icon = Icons.Rounded.Radio,
                 title = R.string.start_radio
             ) {
-//                playerConnection.playQueue(YouTubeQueue.radio(mediaMetadata), isRadio = true)
+                playerConnection.playQueue(YouTubeQueue.radio(mediaMetadata), isRadio = true)
                 onDismiss()
             }
         GridMenuItem(
@@ -432,6 +436,44 @@ fun PlayerMenu(
             title = R.string.add_to_playlist
         ) {
             showChoosePlaylistDialog = true
+        }
+        if (!mediaMetadata.isLocal)
+            DownloadGridMenu(
+                localDateTime = download,
+                onDownload = {
+                    database.transaction {
+                        insert(mediaMetadata)
+                    }
+                    downloadUtil.download(mediaMetadata)
+                },
+                onRemoveDownload = {
+                    DownloadService.sendRemoveDownload(
+                        context,
+                        ExoDownloadService::class.java,
+                        mediaMetadata.id,
+                        false
+                    )
+                }
+            )
+        if (librarySong?.song?.inLibrary != null && !librarySong!!.song.isLocal) {
+            GridMenuItem(
+                icon = Icons.Rounded.LibraryAddCheck,
+                title = R.string.remove_from_library,
+            ) {
+                database.query {
+                    toggleInLibrary(mediaMetadata.id, null)
+                }
+            }
+        } else if (!mediaMetadata.isLocal) {
+            GridMenuItem(
+                icon = Icons.Rounded.LibraryAdd,
+                title = R.string.add_to_library,
+            ) {
+                database.transaction {
+                    insert(mediaMetadata)
+                    toggleInLibrary(mediaMetadata.id, LocalDateTime.now())
+                }
+            }
         }
         GridMenuItem(
             icon = R.drawable.artist,
@@ -545,6 +587,8 @@ fun PlayerMenu(
                 database.transaction {
                     insert(mediaMetadata)
                 }
+
+                playlist.playlist.browseId?.let { YouTube.addToPlaylist(it, mediaMetadata.id) }
 
                 listOf(mediaMetadata.id)
             },
@@ -705,6 +749,7 @@ fun getNextInterval(targetMin: Long): Pair<String, Float> {
     } else if (intervalMinutes < 0) {
         // Next hour
         now.plusHours(1).plusMinutes(targetMin - now.minute)
+//        now.plusMinutes((60 - now.minute) + targetMin)        // other way to calculate targetTime
     } else {
         // Equal to 0
         now.plusHours(1)

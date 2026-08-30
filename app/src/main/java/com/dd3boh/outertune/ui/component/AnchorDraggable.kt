@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 OuterTune Project
+ * Copyright (C) 2025 O﻿ute﻿rTu﻿ne Project
  *
  * SPDX-License-Identifier: GPL-3.0
  *
@@ -45,8 +45,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.MediaItem
@@ -70,24 +70,19 @@ fun SwipeToQueueBox(
     snackbarHostState: SnackbarHostState? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val playerConnection = LocalPlayerConnection.current
-
-    val queueMessage = stringResource(
-        R.string.song_added_to_queue,
-        item.mediaMetadata.title ?: ""
-    )
-    val queueEndMessage = stringResource(
-        R.string.song_added_to_queue_end,
-        item.mediaMetadata.title ?: ""
-    )
 
     SwipeActionBox(
         firstAction = Pair(Icons.AutoMirrored.Rounded.PlaylistPlay, {
             playerConnection?.enqueueNext(item)
             coroutineScope.launch {
                 snackbarHostState?.showSnackbar(
-                    message = queueMessage,
+                    message = context.getString(
+                        R.string.song_added_to_queue,
+                        item.mediaMetadata.title
+                    ),
                     withDismissAction = true,
                     duration = SnackbarDuration.Short
                 )
@@ -98,7 +93,10 @@ fun SwipeToQueueBox(
             coroutineScope.launch {
                 val job = launch {
                     snackbarHostState?.showSnackbar(
-                        message = queueEndMessage,
+                        message = context.getString(
+                            R.string.song_added_to_queue_end,
+                            item.mediaMetadata.title
+                        ),
                         withDismissAction = true,
                         duration = SnackbarDuration.Indefinite
                     )
@@ -197,7 +195,7 @@ fun SwipeActionBox(
                         tint = MaterialTheme.colorScheme.onPrimary,
                         icon = firstAction.first,
                         modifier = Modifier
-                            .alpha(if (progress.intValue == 1) 1f else 0.6f)
+                            .alpha(if (progress.intValue == 1) 1f else 0.6f) // TODO: wai alpha change cause hidden edge to become un-hidden
                             .width(defaultActionSize)
                             .fillMaxHeight()
                             .align(Alignment.CenterStart)
@@ -219,6 +217,8 @@ fun SwipeActionBox(
                                 .offset {
                                     val x = -screenWidth.value + swipeOffset.floatValue
                                     val size = defaultActionSize.value
+                                    // x-\frac{x^{2}}{k}-\left(0.9s\right)
+                                    // x = firstAction offset, k = tightnessFactor, s = size
                                     IntOffset(
                                         ((x - (x * x / tightnessFactor)) - (size * 0.9)
                                             .coerceIn(0.0, size.toDouble())).roundToInt(), 0
@@ -246,7 +246,7 @@ private fun resetDrag(scope: CoroutineScope, offset: MutableState<Float>) {
         animate(
             initialValue = offset.value,
             targetValue = 0f,
-            animationSpec = tween<Float>(durationMillis = 500)
+            animationSpec = tween<Float>(durationMillis = 500) // slowSnapAnimationSpec
         ) { value, _ ->
             offset.value = value
         }

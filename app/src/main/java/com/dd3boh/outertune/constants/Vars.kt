@@ -9,7 +9,6 @@ import com.dd3boh.outertune.BuildConfig
 
 const val ENABLE_FFMETADATAEX = BuildConfig.FLAVOR == "full"
 
-const val M3U_EXPORT_RELATIVE_PATH = false
 
 /**
  * Extra configuration
@@ -24,6 +23,11 @@ const val MAX_DL_JOBS = 5
 // maximum concurrent scanner jobs allowed
 const val MAX_LM_SCANNER_JOBS = 7 // 1 dispatcher + 6 workers
 
+// maximum concurrent scanner jobs allowed
+const val MAX_YTM_SYNC_JOBS = 3
+
+// maximum concurrent scanner jobs allowed
+const val MAX_YTM_CONTENT_JOBS = 16
 
 
 /**
@@ -43,11 +47,17 @@ const val AUTO_SCAN_SOFT_COOLDOWN = 7200000L // 2 hours
 const val LYRIC_FETCH_TIMEOUT = 60000L
 const val SNACKBAR_VERY_SHORT = 2000L
 
-const val OOBE_VERSION = 4
+/**
+ * 5: pre 0.10.0-rc1
+ * 6: 0.10.0-rc1 +
+ */
+const val OOBE_VERSION = 6
 
 const val SCANNER_OWNER_DL = 32
 const val SCANNER_OWNER_LM = 1
 const val SCANNER_OWNER_M3U = 2
+
+const val SYNC_CD = 60000 * 30
 
 const val MAX_PLAYER_CONSECUTIVE_ERR = 3
 

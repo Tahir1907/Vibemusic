@@ -14,6 +14,7 @@ import com.dd3boh.outertune.db.daos.ArtistsDao
 import com.dd3boh.outertune.db.daos.PlaylistsDao
 import com.dd3boh.outertune.db.daos.QueueDao
 import com.dd3boh.outertune.db.daos.SongsDao
+import com.dd3boh.outertune.db.entities.AlbumArtistMap
 import com.dd3boh.outertune.db.entities.AlbumEntity
 import com.dd3boh.outertune.db.entities.ArtistEntity
 import com.dd3boh.outertune.db.entities.Event
@@ -23,6 +24,9 @@ import com.dd3boh.outertune.db.entities.GenreEntity
 import com.dd3boh.outertune.db.entities.LyricsEntity
 import com.dd3boh.outertune.db.entities.QueueEntity
 import com.dd3boh.outertune.db.entities.QueueSongMap
+import com.dd3boh.outertune.db.entities.RecentActivityEntity
+import com.dd3boh.outertune.db.entities.RecentActivityType
+import com.dd3boh.outertune.db.entities.RelatedSongMap
 import com.dd3boh.outertune.db.entities.SearchHistory
 import com.dd3boh.outertune.db.entities.Song
 import com.dd3boh.outertune.db.entities.SongAlbumMap
@@ -32,15 +36,47 @@ import com.dd3boh.outertune.db.entities.SongGenreMap
 import com.dd3boh.outertune.extensions.toSQLiteQuery
 import com.dd3boh.outertune.models.MediaMetadata
 import com.dd3boh.outertune.models.MultiQueueObject
+import com.dd3boh.outertune.models.toMediaMetadata
+import com.zionhuang.innertube.models.AlbumItem
+import com.zionhuang.innertube.models.ArtistItem
+import com.zionhuang.innertube.models.PlaylistItem
+import com.zionhuang.innertube.models.SongItem
+import com.zionhuang.innertube.models.YTItem
+import com.zionhuang.innertube.pages.AlbumPage
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface DatabaseDao : SongsDao, AlbumsDao, ArtistsDao, PlaylistsDao, QueueDao {
 
-    // TODO: random selection or algorithm     fun quickPicks(now: Long = System.currentTimeMillis()): Flow<List<Song>>
     @Transaction
-    @Query("SELECT * FROM song LIMIT 20")
-    fun quickPicks(): Flow<List<Song>>
+    @Query("""
+        SELECT song.*
+        FROM (SELECT *, COUNT(1) AS referredCount
+              FROM related_song_map
+              GROUP BY relatedSongId) map
+                 JOIN song ON song.id = map.relatedSongId
+        WHERE songId IN (SELECT songId
+                         FROM (SELECT songId
+                               FROM event
+                               ORDER BY ROWID DESC
+                               LIMIT 5)
+                         UNION
+                         SELECT songId
+                         FROM (SELECT songId
+                               FROM event
+                               WHERE timestamp > :now - 86400000 * 7
+                               GROUP BY songId
+                               ORDER BY SUM(playTime) DESC
+                               LIMIT 5)
+                         UNION
+                         SELECT id
+                         FROM (SELECT id
+                               FROM song
+                               LIMIT 10))
+        ORDER BY referredCount DESC
+        LIMIT 100
+    """)
+    fun quickPicks(now: Long = System.currentTimeMillis()): Flow<List<Song>>
 
     @Query("SELECT * FROM format WHERE id = :id")
     fun format(id: String?): Flow<FormatEntity?>
@@ -61,11 +97,30 @@ interface DatabaseDao : SongsDao, AlbumsDao, ArtistsDao, PlaylistsDao, QueueDao 
     @Query("DELETE FROM search_history")
     fun clearSearchHistory()
 
+    @Query("SELECT COUNT(1) FROM related_song_map WHERE songId = :songId LIMIT 1")
+    fun hasRelatedSongs(songId: String): Boolean
+
+    @Transaction
+    @Query(
+        """
+        SELECT song.*
+        FROM (SELECT *
+              FROM related_song_map
+              GROUP BY relatedSongId) map
+                 JOIN
+             song
+             ON song.id = map.relatedSongId
+        WHERE songId = :songId
+        """
+    )
+    fun relatedSongs(songId: String): List<Song>
+
     @Query("""
         SELECT * FROM genre
+        WHERE genre.isLocal = 1
         ORDER BY genre.title ASC
     LIMIT :previewSize""")
-    fun allgenresByName(previewSize: Int = Int.MAX_VALUE): List<GenreEntity>
+    fun allLocalGenresByName(previewSize: Int = Int.MAX_VALUE): List<GenreEntity>
 
     @Query("SELECT * FROM genre WHERE id = :id")
     fun genreById(id: String): GenreEntity?
@@ -73,8 +128,8 @@ interface DatabaseDao : SongsDao, AlbumsDao, ArtistsDao, PlaylistsDao, QueueDao 
     @Query("SELECT * FROM genre WHERE title = :name")
     fun genreByName(name: String): GenreEntity?
 
-    @Query("SELECT * FROM genre WHERE title LIKE '%' || :query || '%' LIMIT :previewSize")
-    fun genreByNameFuzzy(query: String, previewSize: Int = Int.MAX_VALUE): List<GenreEntity>
+    @Query("SELECT * FROM genre WHERE isLocal = 1 AND title LIKE '%' || :query || '%' LIMIT :previewSize")
+    fun localGenreByNameFuzzy(query: String, previewSize: Int = Int.MAX_VALUE): List<GenreEntity>
 
     @Transaction
     @Query("UPDATE song_genre_map SET genreId = :newId WHERE genreId = :oldId")
@@ -105,6 +160,9 @@ interface DatabaseDao : SongsDao, AlbumsDao, ArtistsDao, PlaylistsDao, QueueDao 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insert(event: Event)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insert(map: RelatedSongMap)
+
     @Transaction
     fun insert(mediaMetadata: MediaMetadata, block: (SongEntity) -> SongEntity = { it }) {
         if (insert(mediaMetadata.toSongEntity().let(block)) == -1L) return
@@ -114,6 +172,7 @@ interface DatabaseDao : SongsDao, AlbumsDao, ArtistsDao, PlaylistsDao, QueueDao 
                 ArtistEntity(
                     id = artistId,
                     name = artist.name,
+                    isLocal = artist.isLocal
                 )
             )
             insert(
@@ -130,6 +189,7 @@ interface DatabaseDao : SongsDao, AlbumsDao, ArtistsDao, PlaylistsDao, QueueDao 
                 GenreEntity(
                     id = genreId,
                     title = genre.title,
+                    isLocal = genre.isLocal
                 )
             )
             insert(
@@ -151,6 +211,7 @@ interface DatabaseDao : SongsDao, AlbumsDao, ArtistsDao, PlaylistsDao, QueueDao 
                     thumbnailUrl = album?.thumbnailUrl?: mediaMetadata.thumbnailUrl,
                     songCount = 1,
                     duration = (album?.duration ?: 0) + mediaMetadata.duration,
+                    isLocal = it.isLocal
                 )
             )
             insert(
@@ -161,6 +222,87 @@ interface DatabaseDao : SongsDao, AlbumsDao, ArtistsDao, PlaylistsDao, QueueDao 
                 )
             )
         }
+    }
+
+    @Transaction
+    fun insert(albumPage: AlbumPage) {
+        if (insert(AlbumEntity(
+                id = albumPage.album.browseId,
+                playlistId = albumPage.album.playlistId,
+                title = albumPage.album.title,
+                year = albumPage.album.year,
+                thumbnailUrl = albumPage.album.thumbnail,
+                songCount = albumPage.songs.size,
+                duration = albumPage.songs.sumOf { it.duration ?: 0 }
+            )) == -1L
+        ) return
+        albumPage.songs.map(SongItem::toMediaMetadata)
+            .onEach(::insert)
+            .mapIndexed { index, song ->
+                SongAlbumMap(
+                    songId = song.id,
+                    albumId = albumPage.album.browseId,
+                    index = index
+                )
+            }
+            .forEach(::upsert)
+        albumPage.album.artists
+            ?.map { artist ->
+                ArtistEntity(
+                    id = artist.id ?: artistByName(artist.name)?.id ?: ArtistEntity.generateArtistId(),
+                    name = artist.name
+                )
+            }
+            ?.onEach(::insert)
+            ?.mapIndexed { index, artist ->
+                AlbumArtistMap(
+                    albumId = albumPage.album.browseId,
+                    artistId = artist.id,
+                    order = index
+                )
+            }
+            ?.forEach(::insert)
+    }
+
+    @Transaction
+    fun update(album: AlbumEntity, albumPage: AlbumPage) {
+        update(
+            album.copy(
+                id = albumPage.album.browseId,
+                playlistId = albumPage.album.playlistId,
+                title = albumPage.album.title,
+                year = albumPage.album.year,
+                thumbnailUrl = albumPage.album.thumbnail,
+                songCount = albumPage.songs.size,
+                duration = albumPage.songs.sumOf { it.duration ?: 0 }
+            )
+        )
+        albumPage.songs.map(SongItem::toMediaMetadata)
+            .onEach(::insert)
+            .mapIndexed { index, song ->
+                SongAlbumMap(
+                    songId = song.id,
+                    albumId = albumPage.album.browseId,
+                    index = index
+                )
+            }
+            .forEach(::upsert)
+        albumPage.album.artists
+            ?.map { artist ->
+                ArtistEntity(
+                    id = artist.id ?: artistByName(artist.name)?.id ?: ArtistEntity.generateArtistId(),
+                    name = artist.name
+                )
+            }
+            ?.onEach(::insert)
+            ?.mapIndexed { index, artist ->
+                AlbumArtistMap(
+                    albumId = albumPage.album.browseId,
+                    artistId = artist.id,
+                    order = index
+                )
+            }
+            ?.forEach(::insert)
     }
 
     @Upsert
@@ -199,6 +341,7 @@ interface DatabaseDao : SongsDao, AlbumsDao, ArtistsDao, PlaylistsDao, QueueDao 
                 queuePos = mq.queuePos,
                 lastSongPos = mq.lastSongPos,
                 index = mq.index,
+                playlistId = mq.playlistId
             )
         )
 
@@ -221,12 +364,81 @@ interface DatabaseDao : SongsDao, AlbumsDao, ArtistsDao, PlaylistsDao, QueueDao 
         }
     }
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insert(item: RecentActivityEntity)
+
+    @Delete
+    fun delete(item: RecentActivityEntity)
+
+    @Query("DELETE FROM recent_activity")
+    fun clearRecentActivity()
+
+    @Transaction
+    fun insertRecentActivityItem(item: YTItem) {
+        when (item) {
+            is AlbumItem -> {
+                insert(
+                    RecentActivityEntity(
+                        id = item.browseId,
+                        title = item.title,
+                        thumbnail = item.thumbnail,
+                        explicit = item.explicit,
+                        shareLink = item.shareLink,
+                        type = RecentActivityType.ALBUM,
+                        playlistId = item.playlistId,
+                        radioPlaylistId = null,
+                        shufflePlaylistId = null
+                    )
+                )
+            }
+
+            is PlaylistItem -> {
+                insert(
+                    RecentActivityEntity(
+                        id = item.id,
+                        title = item.title,
+                        thumbnail = item.thumbnail,
+                        explicit = item.explicit,
+                        shareLink = item.shareLink,
+                        type = RecentActivityType.PLAYLIST,
+                        playlistId = item.id,
+                        radioPlaylistId = item.radioEndpoint?.playlistId,
+                        shufflePlaylistId = item.shuffleEndpoint?.playlistId
+                    )
+                )
+            }
+
+            is ArtistItem -> {
+                insert(
+                    RecentActivityEntity(
+                        id = item.id,
+                        title = item.title,
+                        thumbnail = item.thumbnail,
+                        explicit = item.explicit,
+                        shareLink = item.shareLink,
+                        type = RecentActivityType.ARTIST,
+                        playlistId = item.playEndpoint?.playlistId,
+                        radioPlaylistId = item.radioEndpoint?.playlistId,
+                        shufflePlaylistId = item.shuffleEndpoint?.playlistId
+                    )
+                )
+            }
+
+            else -> {
+                // do nothing
+            }
+        }
+    }
+
+    @Query("SELECT * FROM recent_activity ORDER BY date DESC")
+    fun recentActivity(): Flow<List<RecentActivityEntity>>
+
     /**
      * Nukes
      */
 
     @Transaction
-    @Query("DELETE FROM genre")
+    @Query("DELETE FROM genre WHERE isLocal = 1")
     fun nukeLocalGenre()
 
     @Transaction
@@ -254,8 +466,8 @@ AND NOT EXISTS (
     @Transaction
     fun nukeLocalData() {
         nukeLocalSongs()
-        nukeArtists()
-        nukeAlbums()
+        nukeLocalArtists()
+        nukeLocalAlbums()
         nukeLocalGenre()
     }
 

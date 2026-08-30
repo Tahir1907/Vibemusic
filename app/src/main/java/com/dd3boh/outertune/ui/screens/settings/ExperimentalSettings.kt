@@ -25,7 +25,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.ConfirmationNumber
 import androidx.compose.material.icons.rounded.Coronavirus
@@ -59,8 +58,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.datastore.preferences.core.edit
 import androidx.navigation.NavController
-import androidx.sqlite.db.SimpleSQLiteQuery
 import coil3.imageLoader
 import com.dd3boh.outertune.LocalDatabase
 import com.dd3boh.outertune.LocalPlayerConnection
@@ -70,10 +69,9 @@ import com.dd3boh.outertune.constants.AudioOffloadKey
 import com.dd3boh.outertune.constants.DevSettingsKey
 import com.dd3boh.outertune.constants.MaxQueuesKey
 import com.dd3boh.outertune.constants.OobeStatusKey
-import com.dd3boh.outertune.constants.PersistentQueueKey
 import com.dd3boh.outertune.constants.TabletUiKey
 import com.dd3boh.outertune.constants.TopBarInsets
-import com.dd3boh.outertune.extensions.isTablet
+import com.dd3boh.outertune.constants.VisitorDataKey
 import com.dd3boh.outertune.ui.component.ColumnWithContentPadding
 import com.dd3boh.outertune.ui.component.PreferenceEntry
 import com.dd3boh.outertune.ui.component.PreferenceGroupTitle
@@ -81,6 +79,7 @@ import com.dd3boh.outertune.ui.component.SwitchPreference
 import com.dd3boh.outertune.ui.component.button.IconButton
 import com.dd3boh.outertune.ui.dialog.CounterDialog
 import com.dd3boh.outertune.ui.utils.backToMain
+import com.dd3boh.outertune.utils.dataStore
 import com.dd3boh.outertune.utils.rememberPreference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -107,8 +106,7 @@ fun ExperimentalSettings(
     )
     val (audioOffload, onAudioOffloadChange) = rememberPreference(key = AudioOffloadKey, defaultValue = false)
     val (maxQueues, onMaxQueuesChange) = rememberPreference(MaxQueuesKey, defaultValue = 19)
-    val (persistentQueue, onPersistentQueueChange) = rememberPreference(key = PersistentQueueKey, defaultValue = true)
-    val (tabletUi, onTabletUiChange) = rememberPreference(TabletUiKey, defaultValue = context.isTablet())
+    val (tabletUi, onTabletUiChange) = rememberPreference(TabletUiKey, defaultValue = false)
 
     val (devSettings, onDevSettingsChange) = rememberPreference(DevSettingsKey, defaultValue = false)
     val (oobeStatus, onOobeStatusChange) = rememberPreference(OobeStatusKey, defaultValue = 0)
@@ -140,14 +138,6 @@ fun ExperimentalSettings(
             title = { Text(stringResource(R.string.max_queues_title)) },
             icon = { Icon(Icons.Rounded.Queue, null) },
             onClick = { showMaxQueuesDialog = true }
-        )
-
-        SwitchPreference(
-            title = { Text(stringResource(R.string.persistent_queue)) },
-            description = stringResource(R.string.persistent_queue_desc_ot),
-            icon = { Icon(Icons.AutoMirrored.Rounded.QueueMusic, null) },
-            checked = persistentQueue,
-            onCheckedChange = onPersistentQueueChange
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -221,6 +211,17 @@ fun ExperimentalSettings(
 
             Spacer(Modifier.height(20.dp))
 
+            PreferenceEntry(
+                title = { Text("Delete VisitorData: This may (or may not) help resolve \"Sign in to confirm you're not a bot\" issues. Not recommended for logged in users.") },
+                onClick = {
+                    runBlocking {
+                        context.dataStore.edit { settings ->
+                            settings.remove(VisitorDataKey)
+                        }
+                    }
+                }
+            )
+
 
             PreferenceEntry(
                 title = { Text("Enter configurator") },
@@ -231,29 +232,6 @@ fun ExperimentalSettings(
                         delay(500)
                     }
                     navController.navigate("setup_wizard")
-                }
-            )
-
-            Spacer(Modifier.height(64.dp))
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-            ) {
-                Text(
-                    text = "Migration cleanup from OuterTune",
-                    fontWeight = FontWeight.ExtraBold,
-                )
-            }
-
-            PreferenceEntry(
-                title = { Text("Nuke remote, non-downloaded songs") },
-                icon = { Icon(Icons.Rounded.ConfirmationNumber, null) },
-                onClick = {
-                    Toast.makeText(context, "Nuking remote, non-downloaded songs...", Toast.LENGTH_SHORT).show()
-                    coroutineScope.launch(Dispatchers.IO) {
-                        Log.i(SETTINGS_TAG, "Nuke remote songs status: ${database.raw(SimpleSQLiteQuery("DELETE FROM song where isLocal = 0 AND dateDownload IS NULL"))}")
-                    }
                 }
             )
 
@@ -564,7 +542,7 @@ fun ExperimentalSettings(
                     onClick = {
                         Toast.makeText(context, "Nuking local artists from database...", Toast.LENGTH_SHORT).show()
                         coroutineScope.launch(Dispatchers.IO) {
-                            Log.i(SETTINGS_TAG, "Nuke database status:  ${database.nukeArtists()}")
+                            Log.i(SETTINGS_TAG, "Nuke database status:  ${database.nukeLocalArtists()}")
                         }
                     }
                 )

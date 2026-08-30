@@ -1,9 +1,15 @@
 package com.dd3boh.outertune.viewmodels
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dd3boh.outertune.db.MusicDatabase
+import com.dd3boh.outertune.utils.reportException
+import com.zionhuang.innertube.YouTube
+import com.zionhuang.innertube.pages.ArtistPage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -17,6 +23,7 @@ class ArtistViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     val artistId = savedStateHandle.get<String>("artistId")!!
+    var artistPage by mutableStateOf<ArtistPage?>(null)
     val libraryArtist = database.artist(artistId)
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
     val librarySongs = database.artistSongsPreview(artistId)
@@ -26,11 +33,20 @@ class ArtistViewModel @Inject constructor(
 
     val isLoading = MutableStateFlow(true)
 
+    init {
+        fetchArtistsFromYTM()
+    }
 
-    fun loadMore() {
-        isLoading.value = true
+    fun fetchArtistsFromYTM() {
         viewModelScope.launch {
-            // TODO: large item volume db continuation
+            isLoading.value = true
+            YouTube.artist(artistId)
+                .onSuccess {
+                    artistPage = it
+                }.onFailure {
+                    reportException(it)
+                }
+
             isLoading.value = false
         }
     }

@@ -17,7 +17,7 @@ import com.dd3boh.outertune.db.entities.PlaylistEntity
 import com.dd3boh.outertune.db.entities.PlaylistSong
 import com.dd3boh.outertune.db.entities.PlaylistSongMap
 import com.dd3boh.outertune.extensions.reversed
-
+import com.zionhuang.innertube.models.PlaylistItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -43,6 +43,20 @@ interface PlaylistsDao {
         GROUP BY p.id
     """)
     fun playlist(playlistId: String): Flow<Playlist?>
+
+    @Transaction
+    @Query("""
+        SELECT 
+            p.*, 
+            COUNT(psm.playlistId) AS songCount,
+            SUM(CASE WHEN s.dateDownload IS NOT NULL THEN 1 ELSE 0 END) AS downloadCount
+        FROM playlist p
+            LEFT JOIN playlist_song_map psm ON p.id = psm.playlistId
+            LEFT JOIN song s ON psm.songId = s.id
+        WHERE p.browseId = :browseId
+        GROUP BY p.id
+    """)
+    fun playlistByBrowseId(browseId: String): Flow<Playlist?>
 
     @Transaction
     @Query("""
@@ -83,15 +97,14 @@ interface PlaylistsDao {
     @RawQuery(observedEntities = [PlaylistEntity::class])
     fun _getPlaylists(query: SupportSQLiteQuery): Flow<List<Playlist>>
 
-    // TODO: remove variant when remote isLocal entirely
+    // TODO: do i even want an enum for this
     /**
      * Variant
      *
-     * 0 -> All playlists (WHERE p.bookmarkedAt IS NOT NULL OR p.isLocal = 1)
+     * 0 -> Use this one (WHERE p.bookmarkedAt IS NOT NULL OR p.isLocal = 1)
      * 1 -> local playlists (WHERE p.isLocal AND p.bookmarkedAt IS NOT NULL)
      * 2 -> editable playlists (WHERE p.isEditable AND p.bookmarkedAt IS NOT NULL)
      */
-
     fun playlists(filter: PlaylistFilter, sortType: PlaylistSortType, descending: Boolean, variant: Int = 0): Flow<List<Playlist>> {
         val orderBy = when (sortType) {
             PlaylistSortType.CREATE_DATE -> "p.rowId ASC"
@@ -145,6 +158,20 @@ interface PlaylistsDao {
     @Update
     fun update(map: PlaylistSongMap)
 
+    @Update
+    fun update(playlistEntity: PlaylistEntity, playlistItem: PlaylistItem) {
+        update(playlistEntity.copy(
+            name = playlistItem.title,
+            browseId = playlistItem.id,
+            isEditable = playlistItem.isEditable,
+            thumbnailUrl = playlistItem.thumbnail,
+            remoteSongCount = playlistItem.songCountText?.let { Regex("""\d+""").find(it)?.value?.toIntOrNull() },
+            playEndpointParams = playlistItem.playEndpoint?.params,
+            shuffleEndpointParams = playlistItem.shuffleEndpoint?.params,
+            radioEndpointParams = playlistItem.radioEndpoint?.params
+        ))
+    }
+
     @Transaction
     fun addSongToPlaylist(playlist: Playlist, songIds: List<String>) {
         var position = playlist.songCount
@@ -181,6 +208,9 @@ interface PlaylistsDao {
     // region Deletes
     @Delete
     fun delete(playlist: PlaylistEntity)
+
+    @Query("DELETE FROM playlist WHERE browseId = :browseId")
+    fun deletePlaylistById(browseId: String)
 
     @Query("DELETE FROM playlist_song_map WHERE playlistId = :playlistId")
     fun clearPlaylist(playlistId: String)

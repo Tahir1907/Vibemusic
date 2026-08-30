@@ -1,6 +1,6 @@
 package com.dd3boh.outertune.ui.menu
 
-
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,9 +17,12 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Output
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlaylistRemove
+import androidx.compose.material.icons.rounded.Radio
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -44,9 +48,9 @@ import androidx.media3.exoplayer.offline.DownloadService
 import androidx.navigation.NavController
 import com.dd3boh.outertune.LocalDatabase
 import com.dd3boh.outertune.LocalDownloadUtil
+import com.dd3boh.outertune.LocalNetworkConnected
 import com.dd3boh.outertune.LocalPlayerConnection
 import com.dd3boh.outertune.R
-import com.dd3boh.outertune.constants.M3U_EXPORT_RELATIVE_PATH
 import com.dd3boh.outertune.db.entities.Playlist
 import com.dd3boh.outertune.db.entities.PlaylistSong
 import com.dd3boh.outertune.db.entities.Song
@@ -54,17 +58,19 @@ import com.dd3boh.outertune.extensions.toMediaItem
 import com.dd3boh.outertune.models.toMediaMetadata
 import com.dd3boh.outertune.playback.ExoDownloadService
 import com.dd3boh.outertune.playback.queues.ListQueue
+import com.dd3boh.outertune.playback.queues.YouTubeQueue
+import com.dd3boh.outertune.ui.component.button.IconButton
 import com.dd3boh.outertune.ui.component.items.PlaylistListItem
 import com.dd3boh.outertune.ui.dialog.AddToPlaylistDialog
 import com.dd3boh.outertune.ui.dialog.AddToQueueDialog
 import com.dd3boh.outertune.ui.dialog.DefaultDialog
 import com.dd3boh.outertune.ui.dialog.TextFieldDialog
-import com.dd3boh.outertune.ui.utils.getNSongsString
 import com.dd3boh.outertune.utils.getDownloadState
-import com.dd3boh.outertune.utils.joinByBullet
 import com.dd3boh.outertune.utils.lmScannerCoroutine
 import com.dd3boh.outertune.utils.reportException
-import com.dd3boh.outertune.utils.scanners.fileFromUri
+import com.dd3boh.outertune.utils.syncCoroutine
+import com.zionhuang.innertube.YouTube
+import com.zionhuang.innertube.models.WatchEndpoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -81,6 +87,8 @@ fun PlaylistMenu(
     val downloadUtil = LocalDownloadUtil.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val queueBoard by playerConnection.queueBoard.collectAsState()
+    val isNetworkConnected = LocalNetworkConnected.current
+    val dbPlaylist by database.playlist(playlist.id).collectAsState(initial = playlist)
     var songs by remember {
         mutableStateOf(emptyList<Song>())
     }
@@ -90,53 +98,16 @@ fun PlaylistMenu(
     ) { uri: Uri? ->
         uri?.let {
             CoroutineScope(lmScannerCoroutine).launch {
-                val result = StringBuilder()
                 try {
-                    val relativePath = fileFromUri(context, uri)?.absolutePath?.substringBeforeLast('/') + "/"
-
-                    if (M3U_EXPORT_RELATIVE_PATH && relativePath == null) {
-                        result.append("Failed to get m3u uri path")
-                    } else {
-                        result.append("#EXTM3U\n")
-                        songs.forEach { s ->
-                            val se = s.song
-                            if (!M3U_EXPORT_RELATIVE_PATH) {
-                                result.append("#EXTINF:${se.duration},${s.artists.joinToString(";") { it.name }} - ${s.title}\n")
-                                result.append(if (se.isLocal) "${se.id}, ${se.localPath}" else "https://youtube.com/watch?v=${se.id}")
-                                result.append("\n")
-                            } else if (se.localPath != null) {
-                                // write the song path as relative to M3U. YTM songs will be ignored
-                                val localPath = se.localPath
-                                val targetPath = relativePath
-
-                                // playlist is in the parent or grandparent of song
-                                if (localPath.contains(targetPath)) {
-                                    result.append(localPath.replace(targetPath, ""))
-                                } else {
-                                    // find the common folder, then replace the common dir with the correct number of ../
-                                    val lpSplit = localPath.split('/').toMutableList()
-                                    val tpSplit = targetPath.trimEnd { it == '/' }.split('/').toMutableList()
-                                    val tpCommon = ArrayList<String>()
-                                    var commonDepth = 0
-                                    while (!lpSplit.isEmpty() && !tpSplit.isEmpty() && lpSplit.first() == tpSplit.first()) {
-                                        commonDepth++
-                                        lpSplit.removeAt(0)
-                                        tpCommon.add(tpSplit.removeAt(0))
-                                    }
-
-                                    result.append(
-                                        localPath.replace(
-                                            tpCommon.joinToString("/") + "/",
-                                            "../".repeat(lpSplit.size)
-                                        )
-                                    )
-                                }
-                                result.append("\n")
-                            }
-                        }
+                    var result = "#EXTM3U\n"
+                    songs.forEach { s ->
+                        val se = s.song
+                        result += "#EXTINF:${se.duration},${s.artists.joinToString(";") { it.name }} - ${s.title}\n"
+                        result += if (se.isLocal) "${se.id}, ${se.localPath}" else "https://youtube.com/watch?v=${se.id}"
+                        result += "\n"
                     }
                     context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                        outputStream.write(result.toString().toByteArray(Charsets.UTF_8))
+                        outputStream.write(result.toByteArray(Charsets.UTF_8))
                     }
                 } catch (e: IOException) {
                     reportException(e)
@@ -155,7 +126,7 @@ fun PlaylistMenu(
         mutableIntStateOf(Download.STATE_STOPPED)
     }
 
-    val editable: Boolean = playlist.playlist.isLocal
+    val editable: Boolean = playlist.playlist.isEditable
 
     var showEditDialog by remember {
         mutableStateOf(false)
@@ -184,9 +155,23 @@ fun PlaylistMenu(
 
     PlaylistListItem(
         playlist = playlist,
-        subtitle = joinByBullet(
-            getNSongsString(playlist.songCount, playlist.downloadCount),
-            playlist.playlist.path.trimEnd { it == '/' }),
+        trailingContent = {
+            if (!playlist.playlist.isEditable) {
+                IconButton(
+                    onClick = {
+                        database.query {
+                            dbPlaylist?.playlist?.toggleLike()?.let { update(it) }
+                        }
+                    }
+                ) {
+                    Icon(
+                        painter = painterResource(if (dbPlaylist?.playlist?.bookmarkedAt != null) R.drawable.favorite else R.drawable.favorite_border),
+                        tint = if (dbPlaylist?.playlist?.bookmarkedAt != null) MaterialTheme.colorScheme.error else LocalContentColor.current,
+                        contentDescription = null
+                    )
+                }
+            }
+        },
         showBadges = true
     )
 
@@ -209,6 +194,7 @@ fun PlaylistMenu(
                 ListQueue(
                     title = playlist.playlist.name,
                     items = songs.map { it.toMediaMetadata() },
+                    playlistId = playlist.playlist.browseId
                 )
             )
         }
@@ -223,8 +209,30 @@ fun PlaylistMenu(
                     title = playlist.playlist.name,
                     items = songs.map { it.toMediaMetadata() },
                     startShuffled = true,
+                    playlistId = playlist.playlist.browseId
                 )
             )
+        }
+
+        if (isNetworkConnected) {
+            playlist.playlist.browseId?.let { browseId ->
+                playlist.playlist.radioEndpointParams?.let { radioEndpointParams ->
+                    GridMenuItem(
+                        icon = Icons.Rounded.Radio,
+                        title = R.string.start_radio
+                    ) {
+                        playerConnection.playQueue(
+                            YouTubeQueue(
+                                WatchEndpoint(
+                                    playlistId = "RDAMPL$browseId",
+                                    params = radioEndpointParams,
+                                )
+                            ), isRadio = true
+                        )
+                        onDismiss()
+                    }
+                }
+            }
         }
 
         GridMenuItem(
@@ -279,19 +287,20 @@ fun PlaylistMenu(
             showDeletePlaylistDialog = true
         }
 
-        // TODO: m3u playlist share
-//        GridMenuItem(
-//                icon = Icons.Rounded.Share,
-//                title = R.string.share
-//        ) {
-//            val intent = Intent().apply {
-//                action = Intent.ACTION_SEND
-//                type = "text/plain"
-//                putExtra(Intent.EXTRA_TEXT, shareLink)
-//            }
-//            context.startActivity(Intent.createChooser(intent, null))
-//            onDismiss()
-//        }
+        playlist.playlist.shareLink?.let { shareLink ->
+            GridMenuItem(
+                icon = Icons.Rounded.Share,
+                title = R.string.share
+            ) {
+                val intent = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, shareLink)
+                }
+                context.startActivity(Intent.createChooser(intent, null))
+                onDismiss()
+            }
+        }
         GridMenuItem(
             icon = Icons.Rounded.Output,
             title = R.string.m3u_export
@@ -306,20 +315,17 @@ fun PlaylistMenu(
             title = { Text(text = stringResource(R.string.edit_playlist)) },
             onDismiss = { showEditDialog = false },
             initialTextFieldValue = TextFieldValue(
-                playlist.playlist.path + playlist.playlist.name,
+                playlist.playlist.name,
                 TextRange(playlist.playlist.name.length)
             ),
-            onDone = { playlistName ->
+            onDone = { name ->
                 onDismiss()
-                val playlistName = playlistName.trimStart { it == '/' }
-                val name = playlistName.substringAfterLast("/")
-                val path = if (playlistName.contains("/")) {
-                    "/" + playlistName.substringBeforeLast("/").trim { it == '/' } + "/"
-                } else {
-                    "/"
-                }
                 database.query {
-                    update(playlist.playlist.copy(name = name, path = path))
+                    update(playlist.playlist.copy(name = name))
+                }
+
+                coroutineScope.launch(syncCoroutine) {
+                    playlist.playlist.browseId?.let { YouTube.renamePlaylist(it, name) }
                 }
             }
         )
@@ -395,6 +401,12 @@ fun PlaylistMenu(
                         database.query {
                             delete(playlist.playlist)
                         }
+
+                        if (!playlist.playlist.isLocal) {
+                            coroutineScope.launch(syncCoroutine) {
+                                playlist.playlist.browseId?.let { YouTube.deletePlaylist(it) }
+                            }
+                        }
                     }
                 ) {
                     Text(text = stringResource(android.R.string.ok))
@@ -426,6 +438,12 @@ fun PlaylistMenu(
             navController = navController,
             songIds = songs.map { it.id },
             onPreAdd = { playlist ->
+                // add songs to playlist and push to ytm
+                songs.let { playlist.playlist.browseId?.let { YouTube.addPlaylistToPlaylist(it, playlist.id) } }
+
+                playlist.playlist.browseId?.let { playlistId ->
+                    YouTube.addPlaylistToPlaylist(playlistId, playlist.id)
+                }
                 songs.map { it.id }
             },
             onDismiss = { showChoosePlaylistDialog = false }

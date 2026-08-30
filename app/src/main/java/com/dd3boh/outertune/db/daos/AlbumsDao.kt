@@ -17,9 +17,11 @@ import com.dd3boh.outertune.db.entities.Album
 import com.dd3boh.outertune.db.entities.AlbumArtistMap
 import com.dd3boh.outertune.db.entities.AlbumEntity
 import com.dd3boh.outertune.db.entities.AlbumWithSongs
+import com.dd3boh.outertune.db.entities.ArtistEntity
 import com.dd3boh.outertune.db.entities.Song
 import com.dd3boh.outertune.db.entities.SongAlbumMap
 import com.dd3boh.outertune.extensions.reversed
+import com.zionhuang.innertube.models.AlbumItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -44,9 +46,6 @@ interface AlbumsDao : ArtistsDao {
     @Query("SELECT * FROM album WHERE id = :id")
     fun albumById(id: String): AlbumEntity?
 
-    @Query("SELECT count(*) FROM song_album_map WHERE albumId = :id")
-    fun getAlbumSongCount(id: String): Int
-
     @Transaction
     @Query("""
         SELECT album.*, count(song.dateDownload) downloadCount
@@ -62,17 +61,18 @@ interface AlbumsDao : ArtistsDao {
     @Query("""
         SELECT *
         FROM album
-        WHERE album.title LIKE '%' || :query || '%'
+        WHERE album.isLocal = 1 AND album.title LIKE '%' || :query || '%'
         LIMIT :previewSize
     """)
-    fun albumsByNameFuzzy(query: String, previewSize: Int = Int.MAX_VALUE): List<AlbumEntity>
+    fun localAlbumsByNameFuzzy(query: String, previewSize: Int = Int.MAX_VALUE): List<AlbumEntity>
 
     @Transaction
     @Query("""
         SELECT * FROM album
+        WHERE album.isLocal = 1
         ORDER BY album.title ASC
     LIMIT :previewSize""")
-    fun allAlbumsByName(previewSize: Int = Int.MAX_VALUE): List<AlbumEntity>
+    fun allLocalAlbumsByName(previewSize: Int = Int.MAX_VALUE): List<AlbumEntity>
 
     @Transaction
     @Query("UPDATE song_album_map SET albumId = :newId WHERE albumId = :oldId")
@@ -229,6 +229,35 @@ interface AlbumsDao : ArtistsDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insert(map: AlbumArtistMap)
 
+    @Transaction
+    fun insert(albumItem: AlbumItem) {
+        if (insert(AlbumEntity(
+                id = albumItem.browseId,
+                playlistId = albumItem.playlistId,
+                title = albumItem.title,
+                year = albumItem.year,
+                thumbnailUrl = albumItem.thumbnail,
+                songCount = 0,
+                duration = 0
+            )) == -1L
+        ) return
+        albumItem.artists
+            ?.map { artist ->
+                ArtistEntity(
+                    id = artist.id ?: artistByName(artist.name)?.id ?: ArtistEntity.generateArtistId(),
+                    name = artist.name
+                )
+            }
+            ?.onEach(::insert)
+            ?.mapIndexed { index, artist ->
+                AlbumArtistMap(
+                    albumId = albumItem.browseId,
+                    artistId = artist.id,
+                    order = index
+                )
+            }
+            ?.forEach(::insert)
+    }
     // endregion
 
     // region Updates
@@ -266,7 +295,7 @@ interface AlbumsDao : ArtistsDao {
     fun delete(album: AlbumEntity)
 
     @Transaction
-    @Query("DELETE FROM album")
-    fun nukeAlbums()
+    @Query("DELETE FROM album WHERE isLocal = 1")
+    fun nukeLocalAlbums()
     // endregion
 }

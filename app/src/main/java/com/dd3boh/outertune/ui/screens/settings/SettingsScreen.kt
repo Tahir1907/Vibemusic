@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Interests
 import androidx.compose.material.icons.rounded.Palette
@@ -34,6 +35,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -42,11 +47,14 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.dd3boh.outertune.LocalSnackbarHostState
 import com.dd3boh.outertune.R
+import com.dd3boh.outertune.constants.LastVersionKey
 import com.dd3boh.outertune.constants.TopBarInsets
+import com.dd3boh.outertune.constants.UpdateAvailableKey
 import com.dd3boh.outertune.ui.component.ColumnWithContentPadding
 import com.dd3boh.outertune.ui.component.PreferenceEntry
 import com.dd3boh.outertune.ui.component.button.IconButton
 import com.dd3boh.outertune.ui.utils.backToMain
+import com.dd3boh.outertune.utils.rememberPreference
 
 val SETTINGS_TAG = "Settings"
 
@@ -60,6 +68,10 @@ fun SettingsScreen(
     val snackbarHostState = LocalSnackbarHostState.current
     val uriHandler = LocalUriHandler.current
 
+    val lastVer by rememberPreference(LastVersionKey, defaultValue = "0.0.0")
+    val (updateAvailable, onUpdateAvailableChange) = rememberPreference(UpdateAvailableKey, defaultValue = false)
+
+    var newVersion by remember { mutableStateOf("") }
     ColumnWithContentPadding(
         modifier = Modifier.fillMaxHeight(),
         columnModifier = Modifier
@@ -69,6 +81,11 @@ fun SettingsScreen(
         ElevatedCard(
             modifier = Modifier.fillMaxWidth()
         ) {
+            PreferenceEntry(
+                title = { Text(stringResource(R.string.grp_account_sync)) },
+                icon = { Icon(Icons.Rounded.AccountCircle, null) },
+                onClick = { navController.navigate("settings/account_sync") }
+            )
             PreferenceEntry(
                 title = { Text(stringResource(R.string.grp_library_and_content)) },
                 icon = { Icon(Icons.AutoMirrored.Rounded.LibraryBooks, null) },
@@ -144,7 +161,6 @@ fun SettingsScreen(
                 icon = { Icon(Icons.Rounded.Info, null) },
                 onClick = { navController.navigate("settings/about") }
             )
-
         }
     }
 

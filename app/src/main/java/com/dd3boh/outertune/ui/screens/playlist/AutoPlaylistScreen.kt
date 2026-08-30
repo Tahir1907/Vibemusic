@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -43,6 +44,9 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -86,6 +90,7 @@ import com.dd3boh.outertune.LocalMenuState
 import com.dd3boh.outertune.LocalPlayerAwareWindowInsets
 import com.dd3boh.outertune.LocalPlayerConnection
 import com.dd3boh.outertune.LocalSnackbarHostState
+import com.dd3boh.outertune.LocalSyncUtils
 import com.dd3boh.outertune.R
 import com.dd3boh.outertune.constants.AlbumThumbnailSize
 import com.dd3boh.outertune.constants.CONTENT_TYPE_HEADER
@@ -118,10 +123,13 @@ import com.dd3boh.outertune.utils.getDownloadState
 import com.dd3boh.outertune.utils.makeTimeString
 import com.dd3boh.outertune.utils.rememberEnumPreference
 import com.dd3boh.outertune.utils.rememberPreference
+import com.dd3boh.outertune.utils.syncCoroutine
 import com.dd3boh.outertune.viewmodels.AutoPlaylistViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 enum class PlaylistType {
@@ -140,6 +148,7 @@ fun AutoPlaylistScreen(
     val density = LocalDensity.current
     val menuState = LocalMenuState.current
     val database = LocalDatabase.current
+    val syncUtils = LocalSyncUtils.current
     val playerConnection = LocalPlayerConnection.current ?: return
 
     val (sortType, onSortTypeChange) = rememberEnumPreference(SongSortTypeKey, SongSortType.CREATE_DATE)
@@ -215,7 +224,14 @@ fun AutoPlaylistScreen(
             PlaylistType.DOWNLOAD -> stringResource(id = R.string.downloaded_songs)
             else -> ""
         },
+        browseId = when (playlistType) {
+            PlaylistType.LIKE -> "LM"
+            else -> null
+        },
     )
+
+    val isSyncingRemoteLikedSongs by syncUtils.isSyncingRemoteLikedSongs.collectAsState()
+    val pullRefreshState = rememberPullToRefreshState()
 
     val thumbnail by viewModel.thumbnail.collectAsState()
     val mutableSongs = remember { mutableStateListOf<Song>() }
@@ -244,6 +260,12 @@ fun AutoPlaylistScreen(
         if (songs.isEmpty()) return@LaunchedEffect
         downloadUtil.downloads.collect { downloads ->
             downloadState = getDownloadState(songs.map { downloads[it.id] })
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        withContext(syncCoroutine) {
+            if (playlistType == PlaylistType.LIKE) syncUtils.syncRemoteLikedSongs()
         }
     }
 
@@ -300,6 +322,15 @@ fun AutoPlaylistScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .pullToRefresh(
+                state = pullRefreshState,
+                isRefreshing = isSyncingRemoteLikedSongs,
+                onRefresh = {
+                    coroutineScope.launch {
+                        syncUtils.syncRemoteLikedSongs(true)
+                    }
+                }
+            ),
     ) {
         ScrollToTopManager(navController, lazyListState)
         LazyColumn(
@@ -346,6 +377,13 @@ fun AutoPlaylistScreen(
                             )
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (playlistType == PlaylistType.LIKE && isSyncingRemoteLikedSongs) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
 
                                 if (playlistType == PlaylistType.LIKE && downloadCount > 0) {
                                     Icon(
@@ -448,6 +486,7 @@ fun AutoPlaylistScreen(
                                         ListQueue(
                                             title = playlist.name,
                                             items = songs.map { it.toMediaMetadata() },
+                                            playlistId = playlist.browseId
                                         )
                                     )
                                 },
@@ -470,6 +509,7 @@ fun AutoPlaylistScreen(
                                             title = playlist.name,
                                             items = songs.map { it.toMediaMetadata() },
                                             startShuffled = true,
+                                            playlistId = playlist.browseId
                                         )
                                     )
                                 },
@@ -549,6 +589,7 @@ fun AutoPlaylistScreen(
                                 title = playlist.name,
                                 items = (if (isSearching) filteredSongs else mutableSongs).map { it.toMediaMetadata() },
                                 startIndex = index,
+                                playlistId = playlist.browseId
                             )
                         )
                     },
@@ -632,6 +673,13 @@ fun AutoPlaylistScreen(
             scrollBehavior = scrollBehavior
         )
 
+        Indicator(
+            isRefreshing = isSyncingRemoteLikedSongs,
+            state = pullRefreshState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(LocalPlayerAwareWindowInsets.current.asPaddingValues()),
+        )
         FloatingFooter(inSelectMode) {
             SelectHeader(
                 navController = navController,

@@ -49,6 +49,7 @@ interface QueueDao {
                     queuePos = queue.queuePos,
                     lastSongPos = queue.lastSongPos,
                     index = queue.index,
+                    playlistId = queue.playlistId
                 )
             )
         }
@@ -75,6 +76,7 @@ interface QueueDao {
             queuePos = q.queuePos,
             lastSongPos = q.lastSongPos,
             index = q.index,
+            playlistId = q.playlistId
         )
     }
     // endregion
@@ -101,6 +103,7 @@ interface QueueDao {
                 queuePos = mq.queuePos,
                 lastSongPos = mq.lastSongPos,
                 index = mq.index,
+                playlistId = mq.playlistId
             )
         )
     }

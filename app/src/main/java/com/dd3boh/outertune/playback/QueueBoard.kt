@@ -25,6 +25,7 @@ import com.dd3boh.outertune.models.MediaMetadata
 import com.dd3boh.outertune.models.MultiQueueObject
 import com.dd3boh.outertune.utils.dataStore
 import com.dd3boh.outertune.utils.get
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -673,7 +674,7 @@ class QueueBoard(
     /**
      * Get all copy of all queues
      */
-    fun getAllQueues() = masterQueues.toList()
+    fun getAllQueues() = masterQueues.toImmutableList()
 
 
     /**
