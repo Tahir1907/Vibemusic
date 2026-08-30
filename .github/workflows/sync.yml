@@ -2,12 +2,12 @@ name: Force Sync Branch
 on:
   push:
     branches: [ dev-online ]
+  workflow_dispatch:
 jobs:
   sync:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      workflows: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -17,5 +17,7 @@ jobs:
           git config user.email "action@github.com"
           git remote add upstream https://github.com/OuterTune/OuterTune.git
           git fetch upstream
-          git checkout -B dev-online upstream/dev
-          git push origin dev-online --force
+          git checkout upstream/dev -- .
+          git checkout HEAD -- .github/workflows
+          git commit -m "Sync code from OuterTune dev" || true
+          git push origin dev-online
