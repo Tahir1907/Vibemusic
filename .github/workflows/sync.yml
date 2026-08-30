@@ -1,0 +1,20 @@
+name: Force Sync Branch
+on:
+  push:
+    branches: [ dev-online ]
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git remote add upstream https://github.com/OuterTune/OuterTune.git
+          git fetch upstream
+          git checkout -B dev-online upstream/dev
+          git push origin dev-online --force
