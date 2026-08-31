@@ -5,6 +5,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.io.FileInputStream
 import java.util.Properties
 
+
 plugins {
     id("com.android.application")
     kotlin("android")
@@ -34,13 +35,21 @@ android {
     }
 
     signingConfigs {
-        create("ot_release") {
-            if (keystorePropertiesFile.exists() && !keystoreProperties.isEmpty) {
+        if (!keystoreProperties.isEmpty) {
+            create("ot_release") {
                 storeFile = file(keystoreProperties["storeFile"] as String)
-                (keystoreProperties["keyAlias"] as? String)?.let { keyAlias = it }
-                (keystoreProperties["keyPassword"] as? String)?.let { keyPassword = it }
-                (keystoreProperties["storePassword"] as? String)?.let { storePassword = it }
+                (keystoreProperties["keyAlias"] as? String)?.let {
+                    keyAlias = it
+                }
+                (keystoreProperties["keyPassword"] as? String)?.let {
+                    keyPassword = it
+                }
+                (keystoreProperties["storePassword"] as? String)?.let {
+                    storePassword = it
+                }
             }
+        } else {
+            create("ot_release") { }
         }
     }
 
@@ -50,20 +59,18 @@ android {
             isShrinkResources = true
             isCrunchPngs = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            if (keystorePropertiesFile.exists()) {
-                signingConfig = signingConfigs.getByName("ot_release")
-            }
+            signingConfig = signingConfigs.getByName("ot_release")
         }
         debug {
             applicationIdSuffix = ".debug"
-            isMinifyEnabled = false
-            isDebuggable = true
         }
 
+        // userdebug is release builds without minify
         create("userdebug") {
             initWith(getByName("release"))
             isMinifyEnabled = false
             isShrinkResources = false
+//            isDebuggable = true
             isProfileable = true
             matchingFallbacks += listOf("release")
         }
@@ -74,6 +81,7 @@ android {
         buildConfig = true
     }
 
+// build variants and stuff
     splits {
         abi {
             isEnable = true
@@ -87,11 +95,13 @@ android {
     flavorDimensions.add("abi")
 
     productFlavors {
+        // main version
         create("core") {
             isDefault = true
             dimension = "abi"
         }
 
+        // fully featured version, large file size
         create("full") {
             dimension = "abi"
         }
@@ -99,10 +109,12 @@ android {
 
     applicationVariants.all {
         val variant = this
-        variant.outputs.forEach { output ->
-            val outputFileName = "OuterTune-${variant.versionName}-${output.name}-${variant.versionCode}.apk"
-            (output as? com.android.build.gradle.api.ApkVariantOutput)?.outputFileName = outputFileName
-        }
+        variant.outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                var outputFileName = "OuterTune-${variant.versionName}-${output.baseName}-${output.versionCode}.apk"
+                output.outputFileName = outputFileName
+            }
     }
 
     compileOptions {
@@ -115,6 +127,7 @@ android {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_21)
             freeCompilerArgs.add("-Xannotation-default-target=param-property")
+
         }
     }
 
@@ -128,23 +141,29 @@ android {
         }
     }
 
+
     aboutLibraries {
         offlineMode = true
 
         collect {
             fetchRemoteLicense = false
             fetchRemoteFunding = false
-            filterVariants.addAll(listOf("release"))
+            filterVariants.addAll("release")
         }
 
         export {
+            // Remove the "generated" timestamp to allow for reproducible builds
             excludeFields = listOf("generated")
         }
 
         license {
+            // Define the strict mode, will fail if the project uses licenses not allowed
             strictMode = com.mikepenz.aboutlibraries.plugin.StrictMode.FAIL
-            allowedLicenses.addAll(listOf("Apache-2.0", "BSD-3-Clause", "GNU LESSER GENERAL PUBLIC LICENSE, Version 2.1", "GNU GENERAL PUBLIC LICENSE, Version 3", "GPL-3.0-only", "EPL-2.0", "MIT", "MPL-2.0", "Public Domain"))
-            additionalLicenses.addAll(listOf("apache_2_0", "gpl_2_1"))
+            // Allowed set of licenses, this project will be able to use without build failure
+            allowedLicenses.addAll("Apache-2.0", "BSD-3-Clause", "GNU LESSER GENERAL PUBLIC LICENSE, Version 2.1", "GNU GENERAL PUBLIC LICENSE, Version 3", "GPL-3.0-only", "EPL-2.0", "MIT", "MPL-2.0", "Public Domain")
+
+            // Full license text for license IDs mentioned here will be included, even if no detected dependency uses them.
+             additionalLicenses.addAll("apache_2_0", "gpl_2_1") // taglib, ffMpeg in ffMetadataEx
         }
 
         library {
@@ -153,8 +172,11 @@ android {
         }
     }
 
+    // for RB
     dependenciesInfo {
+        // Disables dependency metadata when building APKs.
         includeInApk = false
+        // Disables dependency metadata when building Android App Bundles.
         includeInBundle = false
     }
 
@@ -239,6 +261,8 @@ dependencies {
     // misc
     implementation(libs.aboutlibraries.compose.m3)
 
+    // sdk24 support
+    // Support for N is officially unsupported even it the app should still work. Leave this outside of the version catalog.
     implementation("androidx.webkit:webkit:1.14.0")
 }
 
