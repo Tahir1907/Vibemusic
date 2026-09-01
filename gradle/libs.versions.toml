@@ -1,10 +1,9 @@
 [versions]
 aboutLibraries = "12.2.4"
 adaptive = "1.2.0"
-androidGradlePlugin = "8.7.3"
+androidGradlePlugin = "8.13.2"
 annotation = "1.9.1"
-kotlin = "2.0.20"
-ksp = "2.0.20-1.0.25"
+kotlin = "2.3.0"
 coil = "3.3.0"
 compose = "1.10.2"
 lazycolumnscrollbar = "2.2.0"
@@ -14,6 +13,7 @@ media3 = "1.8.0"
 room = "2.8.4"
 hilt = "2.57.2"
 ktor = "3.4.0"
+ksp = "2.3.4"
 
 [libraries]
 annotation = { module = "androidx.annotation:annotation", version.ref = "annotation" }
@@ -83,9 +83,6 @@ junit = { group = "junit", name = "junit", version = "4.13.2" }
 newpipe-extractor = { group = "com.github.TeamNewPipe", name = "NewPipeExtractor", version = "v0.25.1" }
 
 [plugins]
-android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
-android-library = { id = "com.android.library", version.ref = "androidGradlePlugin" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 aboutlibraries = { id = "com.mikepenz.aboutlibraries.plugin", version.ref = "aboutLibraries" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
