@@ -9,7 +9,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Vibemusic"
+rootProject.name = "OuterTune"
 include(":app")
 include(":innertube")
 include(":kugou")
