@@ -36,7 +36,9 @@ jobs:
           echo "date_tag=$DATE_TAG" >> $GITHUB_ENV
 
       - name: Resolve ffMetadatEx
-        run: git clone https://github.com/OuterTune/ffMetadataEx -b vibebur-128 ../ffMetadataEx
+        run: |
+          git clone https://github.com/OuterTune/ffMetadataEx -b vibebur-128 ../ffMetadataEx
+          sed -i -E 's/version "[^"]*"//g' ../ffMetadataEx/build.gradle.kts || true
 
       - name: Resolve ffmpeg libs
         run: git clone https://github.com/mikooomich/ffmpeg-android-maker-prebuilt/ -b audio ../ffMetadataEx/ffmpeg-android-maker
