@@ -43,14 +43,17 @@ jobs:
       - name: Resolve ffmpeg libs
         run: git clone https://github.com/mikooomich/ffmpeg-android-maker-prebuilt/ -b audio ../ffMetadataEx/ffmpeg-android-maker
 
-      - name: Sync AGP version across media build
+      - name: Patch media submodule AGP conflicts
         run: |
-          ROOT_AGP=$(grep -E 'agp|androidGradlePlugin' gradle/libs.versions.toml | head -n 1 | cut -d'"' -f2 || true)
-          echo "Root AGP detected as: $ROOT_AGP"
-          if [ -n "$ROOT_AGP" ] && [ -d "media" ]; then
-            find media -name "libs.versions.toml" -exec sed -i -E "s/agp\s*=\s*\"[^\"]*\"/agp = \"$ROOT_AGP\"/g" {} + || true
-            find media -name "libs.versions.toml" -exec sed -i -E "s/androidGradlePlugin\s*=\s*\"[^\"]*\"/androidGradlePlugin = \"$ROOT_AGP\"/g" {} + || true
-            find media -name "build.gradle.kts" -exec sed -i -E 's/version "[^"]*"//g' {} + || true
+          if [ -d "media" ]; then
+            # Strip version declarations from plugins block in media
+            find media -name "build.gradle.kts" -o -name "build.gradle" -exec sed -i -E 's/version\s+"[^"]+"//g' {} + || true
+            # Sync root AGP version if media uses libs.versions.toml
+            ROOT_AGP=$(grep -E 'agp|android' gradle/libs.versions.toml | head -n 1 | cut -d'"' -f2 || true)
+            if [ -n "$ROOT_AGP" ]; then
+              find media -name "libs.versions.toml" -exec sed -i -E "s/agp\s*=\s*\"[^\"]*\"/agp = \"$ROOT_AGP\"/g" {} + || true
+              find media -name "libs.versions.toml" -exec sed -i -E "s/androidGradlePlugin\s*=\s*\"[^\"]*\"/androidGradlePlugin = \"$ROOT_AGP\"/g" {} + || true
+            fi
           fi
 
       - name: Build core release APK
