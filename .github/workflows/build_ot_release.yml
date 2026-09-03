@@ -43,6 +43,13 @@ jobs:
       - name: Resolve ffmpeg libs
         run: git clone https://github.com/mikooomich/ffmpeg-android-maker-prebuilt/ -b audio ../ffMetadataEx/ffmpeg-android-maker
 
+      - name: Patch media submodule AGP
+        run: |
+          if [ -d "media" ]; then
+            find media -name "libs.versions.toml" -exec sed -i -E 's/agp = "[^"]*"/agp = "8.13.2"/g' {} + || true
+            find media -name "build.gradle.kts" -exec sed -i -E 's/version "[^"]*"//g' {} + || true
+          fi
+
       - name: Build core release APK
         run: ./gradlew assembleCoreRelease
 
