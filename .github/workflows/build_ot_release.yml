@@ -43,18 +43,11 @@ jobs:
       - name: Resolve ffmpeg libs
         run: git clone https://github.com/mikooomich/ffmpeg-android-maker-prebuilt/ -b audio ../ffMetadataEx/ffmpeg-android-maker
 
-      - name: Patch media submodule AGP conflicts
+      - name: Fix Media Submodule AGP Version
         run: |
-          if [ -d "media" ]; then
-            # Target only Android and Kotlin plugin version declarations so protobuf retains its version
-            find media -type f \( -name "build.gradle.kts" -o -name "build.gradle" \) -exec sed -i -E 's/(com\.android\.[a-zA-Z0-9.-]+["'\'']?\s+)version\s+["'\''][^"'\'']+["'\'']/\1/g' {} + || true
-            find media -type f \( -name "build.gradle.kts" -o -name "build.gradle" \) -exec sed -i -E 's/(org\.jetbrains\.kotlin\.[a-zA-Z0-9.-]+["'\'']?\s+)version\s+["'\''][^"'\'']+["'\'']/\1/g' {} + || true
-            
-            ROOT_AGP=$(grep -E 'agp|android' gradle/libs.versions.toml | head -n 1 | cut -d'"' -f2 || true)
-            if [ -n "$ROOT_AGP" ]; then
-              find media -name "libs.versions.toml" -exec sed -i -E "s/agp\s*=\s*\"[^\"]*\"/agp = \"$ROOT_AGP\"/g" {} + || true
-              find media -name "libs.versions.toml" -exec sed -i -E "s/androidGradlePlugin\s*=\s*\"[^\"]*\"/androidGradlePlugin = \"$ROOT_AGP\"/g" {} + || true
-            fi
+          if [ -f "media/gradle/libs.versions.toml" ]; then
+            sed -i -E 's/agp\s*=\s*"9\.[0-9]+\.[0-9]+.*"/agp = "8.7.3"/g' media/gradle/libs.versions.toml
+            sed -i -E 's/androidGradlePlugin\s*=\s*"9\.[0-9]+\.[0-9]+.*"/androidGradlePlugin = "8.7.3"/g' media/gradle/libs.versions.toml
           fi
 
       - name: Build core release APK
