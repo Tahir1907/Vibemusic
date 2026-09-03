@@ -46,9 +46,10 @@ jobs:
       - name: Patch media submodule AGP conflicts
         run: |
           if [ -d "media" ]; then
-            # Strip version declarations from plugins block in media
-            find media -name "build.gradle.kts" -o -name "build.gradle" -exec sed -i -E 's/version\s+"[^"]+"//g' {} + || true
-            # Sync root AGP version if media uses libs.versions.toml
+            # Target only Android and Kotlin plugin version declarations so protobuf retains its version
+            find media -type f \( -name "build.gradle.kts" -o -name "build.gradle" \) -exec sed -i -E 's/(com\.android\.[a-zA-Z0-9.-]+["'\'']?\s+)version\s+["'\''][^"'\'']+["'\'']/\1/g' {} + || true
+            find media -type f \( -name "build.gradle.kts" -o -name "build.gradle" \) -exec sed -i -E 's/(org\.jetbrains\.kotlin\.[a-zA-Z0-9.-]+["'\'']?\s+)version\s+["'\''][^"'\'']+["'\'']/\1/g' {} + || true
+            
             ROOT_AGP=$(grep -E 'agp|android' gradle/libs.versions.toml | head -n 1 | cut -d'"' -f2 || true)
             if [ -n "$ROOT_AGP" ]; then
               find media -name "libs.versions.toml" -exec sed -i -E "s/agp\s*=\s*\"[^\"]*\"/agp = \"$ROOT_AGP\"/g" {} + || true
