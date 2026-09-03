@@ -43,10 +43,13 @@ jobs:
       - name: Resolve ffmpeg libs
         run: git clone https://github.com/mikooomich/ffmpeg-android-maker-prebuilt/ -b audio ../ffMetadataEx/ffmpeg-android-maker
 
-      - name: Patch media submodule AGP
+      - name: Sync AGP version across media build
         run: |
-          if [ -d "media" ]; then
-            find media -name "libs.versions.toml" -exec sed -i -E 's/agp = "[^"]*"/agp = "8.13.2"/g' {} + || true
+          ROOT_AGP=$(grep -E 'agp|androidGradlePlugin' gradle/libs.versions.toml | head -n 1 | cut -d'"' -f2 || true)
+          echo "Root AGP detected as: $ROOT_AGP"
+          if [ -n "$ROOT_AGP" ] && [ -d "media" ]; then
+            find media -name "libs.versions.toml" -exec sed -i -E "s/agp\s*=\s*\"[^\"]*\"/agp = \"$ROOT_AGP\"/g" {} + || true
+            find media -name "libs.versions.toml" -exec sed -i -E "s/androidGradlePlugin\s*=\s*\"[^\"]*\"/androidGradlePlugin = \"$ROOT_AGP\"/g" {} + || true
             find media -name "build.gradle.kts" -exec sed -i -E 's/version "[^"]*"//g' {} + || true
           fi
 
