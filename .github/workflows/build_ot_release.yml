@@ -43,11 +43,10 @@ jobs:
       - name: Resolve ffmpeg libs
         run: git clone https://github.com/mikooomich/ffmpeg-android-maker-prebuilt/ -b audio ../ffMetadataEx/ffmpeg-android-maker
 
-      - name: Fix Media Submodule AGP Version
+      - name: Force match AGP version across media
         run: |
-          if [ -f "media/gradle/libs.versions.toml" ]; then
-            sed -i -E 's/agp\s*=\s*"9\.[0-9]+\.[0-9]+.*"/agp = "8.7.3"/g' media/gradle/libs.versions.toml
-            sed -i -E 's/androidGradlePlugin\s*=\s*"9\.[0-9]+\.[0-9]+.*"/androidGradlePlugin = "8.7.3"/g' media/gradle/libs.versions.toml
+          if [ -d "media" ]; then
+            find media -type f -exec sed -i -E 's/9\.0\.0/8.13.2/g' {} + || true
           fi
 
       - name: Build core release APK
