@@ -23,12 +23,15 @@ jobs:
 
       - name: Setup signing configs
         run: |
+          mkdir -p app
           if [ -n "$KEYSTORE" ] && [ -n "$KEYSTORE_PROPERTIES" ]; then
             echo "$KEYSTORE" | base64 --decode > test.jks
+            echo "$KEYSTORE" | base64 --decode > app/test.jks
             echo "$KEYSTORE_PROPERTIES" > keystore.properties
           else
             echo "Secrets missing, generating auto-signing release key..."
-            keytool -genkeypair -v -keystore test.jks -keyalg RSA -keysize 2048 -validity 10000 -alias ot_alias -storepass android -keypass android -dname "CN=Vibemusic, OU=Dev, O=Vibemusic, L=City, S=State, C=US"
+            keytool -genkeypair -v -keystore app/test.jks -keyalg RSA -keysize 2048 -validity 10000 -alias ot_alias -storepass android -keypass android -dname "CN=Vibemusic, OU=Dev, O=Vibemusic, L=City, S=State, C=US"
+            cp app/test.jks test.jks
             cat <<EOF > keystore.properties
           storeFile=test.jks
           keyAlias=ot_alias
