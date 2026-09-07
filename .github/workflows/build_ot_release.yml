@@ -49,13 +49,12 @@ jobs:
           DATE_TAG=$(date +'%Y-%m-%d_%H-%M-%S')
           echo "date_tag=$DATE_TAG" >> $GITHUB_ENV
 
-      - name: Resolve ffMetadatEx
+      - name: Resolve ffMetadataEx and FFmpeg libs
         run: |
-          git clone https://github.com/OuterTune/ffMetadataEx -b vibebur-128 ../ffMetadataEx
-          sed -i -E 's/version "[^"]*"//g' ../ffMetadataEx/build.gradle.kts || true
-
-      - name: Resolve ffmpeg libs
-        run: git clone https://github.com/mikooomich/ffmpeg-android-maker-prebuilt/ -b audio ../ffMetadataEx/ffmpeg-android-maker
+          git clone https://github.com/OuterTune/ffMetadataEx -b vibebur-128 ffMetadataEx
+          git clone https://github.com/mikooomich/ffmpeg-android-maker-prebuilt/ -b audio ffMetadataEx/ffmpeg-android-maker
+          sed -i -E 's/version "[^"]*"//g' ffMetadataEx/build.gradle.kts || true
+          ln -s $(pwd)/ffMetadataEx ../ffMetadataEx || true
 
       - name: Force match AGP version across media
         run: |
