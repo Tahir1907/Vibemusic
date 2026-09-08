@@ -56,7 +56,7 @@ jobs:
           git clone https://github.com/mikooomich/ffmpeg-android-maker-prebuilt/ -b audio ffMetadataEx/ffmpeg-android-maker
           sed -i -E 's/version "[^"]*"//g' ffMetadataEx/build.gradle.kts || true
           sed -i -E 's/alias\(libs\.plugins\.android\.library\)(\s*apply\s*false)?/id("com.android.library")/g' ffMetadataEx/build.gradle.kts || true
-          echo -e "\nandroid {\n    compileSdk = 35\n}" >> ffMetadataEx/build.gradle.kts
+          echo -e "\nandroid {\n    namespace = \"com.github.outertune.ffmetadataex\"\n    compileSdk = 35\n}" >> ffMetadataEx/build.gradle.kts
           ln -s $(pwd)/ffMetadataEx ../ffMetadataEx || true
 
       - name: Force match AGP version across media
