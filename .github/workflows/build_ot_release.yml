@@ -56,14 +56,21 @@ jobs:
           git clone https://github.com/mikooomich/ffmpeg-android-maker-prebuilt/ -b audio ffMetadataEx/ffmpeg-android-maker
           ln -s $(pwd)/ffMetadataEx ../ffMetadataEx || true
 
-          if [ -f "ffMetadataEx/build.gradle.kts" ]; then
+          sed -i -E 's/alias\(libs\.plugins\.android\.library\)/id("com.android.library")/g' ffMetadataEx/build.gradle.kts || true
+          sed -i -E 's/alias\(libs\.plugins\.kotlin\.android\)/id("org.jetbrains.kotlin.android")/g' ffMetadataEx/build.gradle.kts || true
+
+          if grep -q "android {" ffMetadataEx/build.gradle.kts; then
             sed -i '/android {/a \    namespace = "com.dd3boh.outertune.ffmetadataex"\n    compileSdk = 35' ffMetadataEx/build.gradle.kts || true
+          else
+            echo -e "\nandroid {\n    namespace = \"com.dd3boh.outertune.ffmetadataex\"\n    compileSdk = 35\n}" >> ffMetadataEx/build.gradle.kts
           fi
 
       - name: Configure media submodules
         run: |
           if [ -d "media" ]; then
-            find media -name "build.gradle.kts" -exec sed -i '/android {/a \    compileSdk = 35' {} + || true
+            find media -name "build.gradle.kts" -exec sed -i -E 's/alias\(libs\.plugins\.android\.library\)/id("com.android.library")/g' {} + || true
+            find media -name "build.gradle.kts" -exec sed -i -E 's/alias\(libs\.plugins\.kotlin\.android\)/id("org.jetbrains.kotlin.android")/g' {} + || true
+            find media -name "build.gradle.kts" -exec sed -i -E 's/9\.0\.0/8.13.2/g' {} + || true
           fi
 
       - name: Build core release APK
