@@ -9,14 +9,17 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "OuterTune"
+rootProject.name = "Vibemusic"
 include(":app")
 include(":innertube")
 include(":kugou")
 include(":lrclib")
 include(":material-color-utilities")
-include(":ffMetadataEx")
 include(":taglib")
+
+if (file("ffMetadataEx").exists()) {
+    include(":ffMetadataEx")
+}
 
 // Use a local copy of NewPipe Extractor by uncommenting the lines below.
 // We assume, that OuterTune and NewPipe Extractor have the same parent directory.
@@ -34,15 +37,3 @@ include(":taglib")
 //        substitute(module("com.github.teamnewpipe:NewPipeExtractor")).using(project(":extractor"))
 //    }
 //}
-
-
-includeBuild(file("media").toPath().toRealPath().toAbsolutePath().toString()) {
-    dependencySubstitution {
-        substitute(module("androidx.media3:media3-common")).using(project(":lib-common"))
-        substitute(module("androidx.media3:media3-common-ktx")).using(project(":lib-common-ktx"))
-        substitute(module("androidx.media3:media3-datasource-okhttp")).using(project(":lib-datasource-okhttp"))
-        substitute(module("androidx.media3:media3-exoplayer")).using(project(":lib-exoplayer"))
-        substitute(module("androidx.media3:media3-exoplayer-workmanager")).using(project(":lib-exoplayer-workmanager"))
-        substitute(module("androidx.media3:media3-session")).using(project(":lib-session"))
-    }
-}
