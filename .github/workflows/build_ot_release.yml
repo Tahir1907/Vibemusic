@@ -1,4 +1,4 @@
-name: Build APKs for release
+Name: Build APKs for release
 on:
   workflow_dispatch:
 
@@ -58,8 +58,8 @@ jobs:
 
           cat << 'EOF' > ffMetadataEx/build.gradle.kts
           plugins {
-              alias(libs.plugins.android.library)
-              alias(libs.plugins.kotlin.android)
+              id("com.android.library")
+              id("org.jetbrains.kotlin.android")
           }
 
           android {
@@ -78,9 +78,7 @@ jobs:
           EOF
 
       - name: Build core release APK
-        run: |
-          rm -rf media
-          ./gradlew assembleCoreRelease
+        run: ./gradlew assembleCoreRelease
 
       - name: Build full release APK
         run: ./gradlew assembleFullRelease
