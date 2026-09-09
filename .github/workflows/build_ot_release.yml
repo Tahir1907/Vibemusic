@@ -56,21 +56,36 @@ jobs:
           git clone https://github.com/mikooomich/ffmpeg-android-maker-prebuilt/ -b audio ffMetadataEx/ffmpeg-android-maker
           ln -s $(pwd)/ffMetadataEx ../ffMetadataEx || true
 
-          sed -i -E 's/alias\(libs\.plugins\.android\.library\)/id("com.android.library")/g' ffMetadataEx/build.gradle.kts || true
-          sed -i -E 's/alias\(libs\.plugins\.kotlin\.android\)/id("org.jetbrains.kotlin.android")/g' ffMetadataEx/build.gradle.kts || true
+          python3 -c '
+          import re
+          with open("ffMetadataEx/build.gradle.kts", "r") as f:
+              content = f.read()
 
-          if grep -q "android {" ffMetadataEx/build.gradle.kts; then
-            sed -i '/android {/a \    namespace = "com.dd3boh.outertune.ffmetadataex"\n    compileSdk = 35' ffMetadataEx/build.gradle.kts || true
-          else
-            echo -e "\nandroid {\n    namespace = \"com.dd3boh.outertune.ffmetadataex\"\n    compileSdk = 35\n}" >> ffMetadataEx/build.gradle.kts
-          fi
+          # Replace broken catalog plugins block with direct plugin IDs
+          content = re.sub(r"plugins\s*\{[^}]*\}", "plugins {\n    id(\"com.android.library\")\n    id(\"org.jetbrains.kotlin.android\")\n}", content, count=1)
+
+          # Inject namespace and compileSdk into android block
+          if "namespace" not in content:
+              content = re.sub(r"android\s*\{", "android {\n    namespace = \"com.dd3boh.outertune.ffmetadataex\"\n    compileSdk = 35", content, count=1)
+
+          with open("ffMetadataEx/build.gradle.kts", "w") as f:
+              f.write(content)
+          '
 
       - name: Configure media submodules
         run: |
           if [ -d "media" ]; then
-            find media -name "build.gradle.kts" -exec sed -i -E 's/alias\(libs\.plugins\.android\.library\)/id("com.android.library")/g' {} + || true
-            find media -name "build.gradle.kts" -exec sed -i -E 's/alias\(libs\.plugins\.kotlin\.android\)/id("org.jetbrains.kotlin.android")/g' {} + || true
-            find media -name "build.gradle.kts" -exec sed -i -E 's/9\.0\.0/8.13.2/g' {} + || true
+            python3 -c '
+            import glob, re
+            for path in glob.glob("media/**/build.gradle.kts", recursive=True):
+                with open(path, "r") as f:
+                    c = f.read()
+                c = re.sub(r"plugins\s*\{[^}]*\}", "plugins {\n    id(\"com.android.library\")\n    id(\"org.jetbrains.kotlin.android\")\n}", c, count=1)
+                if "compileSdk" not in c:
+                    c = re.sub(r"android\s*\{", "android {\n    compileSdk = 35", c, count=1)
+                with open(path, "w") as f:
+                    f.write(c)
+            ' || true
           fi
 
       - name: Build core release APK
