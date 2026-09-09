@@ -1,4 +1,4 @@
-Name: Build APKs for release
+name: Build APKs for release
 on:
   workflow_dispatch:
 
