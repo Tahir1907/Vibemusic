@@ -654,7 +654,61 @@ class MusicService : MediaLibraryService(),
             .setCacheWriteDataSinkFactory(null)
             .setFlags(FLAG_IGNORE_CACHE_ON_ERROR)
     }
-
+private fun createRenderersFactory(gaplessOffloadAllowed: Boolean): DefaultRenderersFactory {
+        if (ENABLE_FFMETADATAEX) {
+            return object : NextRenderersFactory(this@MusicService) {
+                override fun buildAudioSink(
+                    context: Context,
+                    enableFloatOutput: Boolean,
+                    enableAudioTrackPlaybackParams: Boolean
+                ): AudioSink? {
+                    return DefaultAudioSink.Builder(this@MusicService)
+                        .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                        .setAudioProcessorChain(
+                            DefaultAudioSink.DefaultAudioProcessorChain(
+                                emptyArray(),
+                                SilenceSkippingAudioProcessor(),
+                                SonicAudioProcessor()
+                            )
+                        )
+                        .setAudioOffloadSupportProvider(
+                            MyAudioOffloadSupportProvider(
+                                DefaultAudioOffloadSupportProvider(context),
+                                !gaplessOffloadAllowed
+                            )
+                        )
+                        .build()
+                }
+            }
+                .setEnableDecoderFallback(true)
+                .setExtensionRendererMode(audioDecoder)
+        } else {
+            return object : DefaultRenderersFactory(this) {
+                override fun buildAudioSink(
+                    context: Context,
+                    enableFloatOutput: Boolean,
+                    enableAudioTrackPlaybackParams: Boolean
+                ): AudioSink? {
+                    return DefaultAudioSink.Builder(this@MusicService)
+                        .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                        .setAudioProcessorChain(
+                            DefaultAudioSink.DefaultAudioProcessorChain(
+                                emptyArray(),
+                                SilenceSkippingAudioProcessor(),
+                                SonicAudioProcessor()
+                            )
+                        )
+                        .setAudioOffloadSupportProvider(
+                            MyAudioOffloadSupportProvider(
+                                DefaultAudioOffloadSupportProvider(context),
+                                !gaplessOffloadAllowed
+                            )
+                        )
+                        .build()
+                }
+            }
+        }
+    }
     private fun createDataSourceFactory(): DataSource.Factory {
         val songUrlCache = HashMap<String, Pair<String, Long>>()
         return ResolvingDataSource.Factory(createCacheDataSource()) { dataSpec ->
