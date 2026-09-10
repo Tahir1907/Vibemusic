@@ -978,4 +978,22 @@ class MusicService : MediaLibraryService(),
     override fun onPlaylistMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
         super.onPlaylistMetadataChanged(mediaMetadata)
     }
+
+    companion object {
+        const val NOTIFICATION_ID = 1
+        const val CHANNEL_ID = "music_player_channel"
+        const val COMMAND_GET_BINDER = "get_binder"
+        const val ROOT = "root"
+        const val SONG = "song"
+        const val ARTIST = "artist"
+        const val ALBUM = "album"
+        const val PLAYLIST = "playlist"
+        const val SEARCH = "search"
+        private const val CHUNK_LENGTH = 512 * 1024L
+    }
+
+    inner class MusicBinder : Binder() {
+        val service: MusicService
+            get() = this@MusicService
+    }
 }
