@@ -21,6 +21,11 @@ jobs:
           distribution: "temurin"
           cache: 'gradle'
 
+      - name: Accept SDK licenses & install NDK
+        run: |
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "ndk;29.0.13113456"
+
       - name: Setup signing configs
         run: |
           mkdir -p app
@@ -52,14 +57,14 @@ jobs:
       - name: Resolve ffMetadataEx and FFmpeg libs
         run: |
           rm -rf ffMetadataEx ../ffMetadataEx
-          git clone --depth 1 https://github.com/OuterTune/ffMetadataEx -b vibebur-128 ffMetadataEx
-          git clone --depth 1 https://github.com/mikooomich/ffmpeg-android-maker-prebuilt/ -b audio ffMetadataEx/ffmpeg-android-maker
+          git clone https://github.com/OuterTune/ffMetadataEx -b vibebur-128 ffMetadataEx
+          git clone https://github.com/mikooomich/ffmpeg-android-maker-prebuilt/ -b audio ffMetadataEx/ffmpeg-android-maker
           ln -s $(pwd)/ffMetadataEx ../ffMetadataEx || true
 
           cat << 'EOF' > ffMetadataEx/build.gradle.kts
           plugins {
-              id("com.android.library")
-              id("org.jetbrains.kotlin.android")
+              alias(libs.plugins.android.library)
+              alias(libs.plugins.kotlin.android)
           }
 
           android {
