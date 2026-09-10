@@ -654,15 +654,18 @@ class MusicService : MediaLibraryService(),
             .setCacheWriteDataSinkFactory(null)
             .setFlags(FLAG_IGNORE_CACHE_ON_ERROR)
     }
-private fun createRenderersFactory(gaplessOffloadAllowed: Boolean): DefaultRenderersFactory {
+
+    private fun createRenderersFactory(gaplessOffloadAllowed: Boolean): DefaultRenderersFactory {
         if (ENABLE_FFMETADATAEX) {
             return object : NextRenderersFactory(this@MusicService) {
                 override fun buildAudioSink(
                     context: Context,
+                    pcmEncodingRestrictionLifted: Boolean,
                     enableFloatOutput: Boolean,
                     enableAudioTrackPlaybackParams: Boolean
                 ): AudioSink? {
                     return DefaultAudioSink.Builder(this@MusicService)
+                        .setPcmEncodingRestrictionLifted(pcmEncodingRestrictionLifted)
                         .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                         .setAudioProcessorChain(
                             DefaultAudioSink.DefaultAudioProcessorChain(
@@ -686,10 +689,12 @@ private fun createRenderersFactory(gaplessOffloadAllowed: Boolean): DefaultRende
             return object : DefaultRenderersFactory(this) {
                 override fun buildAudioSink(
                     context: Context,
+                    pcmEncodingRestrictionLifted: Boolean,
                     enableFloatOutput: Boolean,
                     enableAudioTrackPlaybackParams: Boolean
                 ): AudioSink? {
                     return DefaultAudioSink.Builder(this@MusicService)
+                        .setPcmEncodingRestrictionLifted(pcmEncodingRestrictionLifted)
                         .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                         .setAudioProcessorChain(
                             DefaultAudioSink.DefaultAudioProcessorChain(
@@ -709,6 +714,7 @@ private fun createRenderersFactory(gaplessOffloadAllowed: Boolean): DefaultRende
             }
         }
     }
+
     private fun createDataSourceFactory(): DataSource.Factory {
         val songUrlCache = HashMap<String, Pair<String, Long>>()
         return ResolvingDataSource.Factory(createCacheDataSource()) { dataSpec ->
@@ -817,66 +823,6 @@ private fun createRenderersFactory(gaplessOffloadAllowed: Boolean): DefaultRende
             songUrlCache[mediaId] =
                 streamUrl to System.currentTimeMillis() + (playbackData.streamExpiresInSeconds * 1000L)
             dataSpec.withUri(streamUrl.toUri()).subrange(dataSpec.uriPositionOffset, CHUNK_LENGTH)
-        }
-    }
-
-    private fun createRenderersFactory(gaplessOffloadAllowed: Boolean): DefaultRenderersFactory {
-        if (ENABLE_FFMETADATAEX) {
-            return object : NextRenderersFactory(this@MusicService) {
-                override fun buildAudioSink(
-                    context: Context,
-                    pcmEncodingRestrictionLifted: Boolean,
-                    enableFloatOutput: Boolean,
-                    enableAudioTrackPlaybackParams: Boolean
-                ): AudioSink? {
-                    return DefaultAudioSink.Builder(this@MusicService)
-                        .setPcmEncodingRestrictionLifted(pcmEncodingRestrictionLifted)
-                        .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                        .setAudioProcessorChain(
-                            DefaultAudioSink.DefaultAudioProcessorChain(
-                                emptyArray(),
-                                SilenceSkippingAudioProcessor(),
-                                SonicAudioProcessor()
-                            )
-                        )
-                        .setAudioOffloadSupportProvider(
-                            MyAudioOffloadSupportProvider(
-                                DefaultAudioOffloadSupportProvider(context),
-                                !gaplessOffloadAllowed
-                            )
-                        )
-                        .build()
-                }
-            }
-                .setEnableDecoderFallback(true)
-                .setExtensionRendererMode(audioDecoder)
-        } else {
-            return object : DefaultRenderersFactory(this) {
-                override fun buildAudioSink(
-                    context: Context,
-                    pcmEncodingRestrictionLifted: Boolean,
-                    enableFloatOutput: Boolean,
-                    enableAudioTrackPlaybackParams: Boolean
-                ): AudioSink? {
-                    return DefaultAudioSink.Builder(this@MusicService)
-                        .setPcmEncodingRestrictionLifted(pcmEncodingRestrictionLifted)
-                        .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                        .setAudioProcessorChain(
-                            DefaultAudioSink.DefaultAudioProcessorChain(
-                                emptyArray(),
-                                SilenceSkippingAudioProcessor(),
-                                SonicAudioProcessor()
-                            )
-                        )
-                        .setAudioOffloadSupportProvider(
-                            MyAudioOffloadSupportProvider(
-                                DefaultAudioOffloadSupportProvider(context),
-                                !gaplessOffloadAllowed
-                            )
-                        )
-                        .build()
-                }
-            }
         }
     }
 
@@ -998,219 +944,63 @@ private fun createRenderersFactory(gaplessOffloadAllowed: Boolean): DefaultRende
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         super.onMediaItemTransition(mediaItem, reason)
-        // +2 when and error happens, and -1 when transition. Thus when error, number increments by 1, else doesn't change
-        if (consecutivePlaybackErr > 0) {
-            consecutivePlaybackErr--
-        }
-
-        if (player.isPlaying && reason == MEDIA_ITEM_TRANSITION_REASON_SEEK) {
-            player.prepare()
-            player.play()
-        }
-
-        // Auto load more songs
-        val q = queueBoard.value.getCurrentQueue()
-        val songCount = q?.getSize() ?: -1
-        val playlistId = q?.playlistId
-        if (dataStore.get(AutoLoadMoreKey, true) &&
-            reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT &&
-            player.mediaItemCount - player.currentMediaItemIndex <= 5 &&
-            playlistId != null // aka "hasNext"
-        ) {
-            Log.d(TAG, "onMediaItemTransition: Triggering queue auto load more")
-            scope.launch(SilentHandler) {
-                val endpoint = playlistId // playlistId.substringBefore("\n")
-                val continuation = null // playlistId.substringAfter("\n")
-                val yq = YouTubeQueue(WatchEndpoint(endpoint, continuation))
-                val mediaItems = yq.nextPage()
-                q.playlistId = mediaItems.takeLast(4).shuffled().first().id // yq.getContinuationEndpoint()
-                Log.d(TAG, "onMediaItemTransition: Got ${mediaItems.size} songs from radio")
-                if (player.playbackState != STATE_IDLE && songCount > 1) { // initial radio loading is handled by playQueue()
-                    queueBoard.value.enqueueEnd(mediaItems.drop(1))
-                }
-            }
-        }
-
-        queueBoard.value.setCurrQueuePosIndex(player.currentMediaItemIndex)
-
-        // reshuffle queue when shuffle AND repeat all are enabled
-        // no, when repeat mode is on, player does not "STATE_ENDED"
-        if (player.currentMediaItemIndex == player.mediaItemCount - 1 &&
-            (reason == MEDIA_ITEM_TRANSITION_REASON_AUTO || reason == MEDIA_ITEM_TRANSITION_REASON_SEEK) &&
-            player.shuffleModeEnabled && player.repeatMode == REPEAT_MODE_ALL
-        ) {
-            scope.launch(SilentHandler) {
-                // or else race condition: Assertions.checkArgument(eventTime.realtimeMs >= currentPlaybackStateStartTimeMs) fails in updatePlaybackState()
-                delay(200)
-                queueBoard.value.shuffleCurrent(player.mediaItemCount > 2)
-                queueBoard.value.setCurrQueue()
-            }
-        }
-
-        updateNotification() // also updates when queue changes
+        consecutivePlaybackErr = 0
+        currentMediaMetadata.value = mediaItem?.metadata
     }
 
     override fun onPlaybackStateChanged(@Player.State playbackState: Int) {
-        if (playbackState == STATE_IDLE) {
-            queuePlaylistId = null
-        }
-    }
-
-    override fun onEvents(player: Player, events: Player.Events) {
-        if (events.containsAny(Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_PLAY_WHEN_READY_CHANGED)) {
-            val isBufferingOrReady =
-                player.playbackState == Player.STATE_BUFFERING || player.playbackState == Player.STATE_READY
-            if (isBufferingOrReady && player.playWhenReady) {
-                openAudioEffectSession()
-            } else {
-                closeAudioEffectSession()
-                if (!player.playWhenReady) {
-                    waitingForNetworkConnection.value = false
-                }
-            }
-        }
-        if (events.containsAny(EVENT_TIMELINE_CHANGED, EVENT_POSITION_DISCONTINUITY)) {
-            currentMediaMetadata.value = player.currentMetadata
-        }
-    }
-
-    override fun onPlaybackStatsReady(eventTime: AnalyticsListener.EventTime, playbackStats: PlaybackStats) {
-        offloadScope.launch {
-            val mediaItem = eventTime.timeline.getWindow(eventTime.windowIndex, Timeline.Window()).mediaItem
-            var minPlaybackDur = (dataStore.get(minPlaybackDurKey, 30).toFloat() / 100)
-            // ensure within bounds
-            if (minPlaybackDur >= 1f) {
-                minPlaybackDur = 0.99f // Ehhh 99 is good enough to avoid any rounding errors
-            } else if (minPlaybackDur < 0.01f) {
-                minPlaybackDur = 0.01f // Still want "spam skipping" to not count as plays
-            }
-
-            val playRatio =
-                playbackStats.totalPlayTimeMs.toFloat() / ((mediaItem.metadata?.duration?.times(1000)) ?: -1)
-            Log.d(TAG, "Playback ratio: $playRatio Min threshold: $minPlaybackDur")
-            if (playRatio >= minPlaybackDur && !dataStore.get(PauseListenHistoryKey, false)) {
-                database.query {
-                    incrementPlayCount(mediaItem.mediaId)
-                    try {
-                        insert(
-                            Event(
-                                songId = mediaItem.mediaId,
-                                timestamp = LocalDateTime.now(),
-                                playTime = playbackStats.totalPlayTimeMs
-                            )
-                        )
-                    } catch (_: SQLException) {
-                    }
-                }
-
-                // TODO: support playlist id
-                val ytHist = mediaItem.metadata?.isLocal != true && !dataStore.get(PauseRemoteListenHistoryKey, false)
-                Log.d(TAG, "Trying to register remote history: $ytHist")
-                if (ytHist) {
-                    val playbackUrl = YTPlayerUtils.playerResponseForMetadata(mediaItem.mediaId, null)
-                        .getOrNull()?.playbackTracking?.videostatsPlaybackUrl?.baseUrl
-                    Log.d(TAG, "Got playback url: $playbackUrl")
-                    playbackUrl?.let {
-                        YouTube.registerPlayback(null, playbackUrl)
-                            .onFailure {
-                                reportException(it)
-                            }
-                    }
-                }
-            }
-        }
-    }
-
-    override fun onRepeatModeChanged(repeatMode: Int) {
-        updateNotification()
-        offloadScope.launch {
-            dataStore.edit { settings ->
-                settings[RepeatModeKey] = repeatMode
-            }
-        }
-    }
-
-    override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
-        val q = queueBoard.value.getCurrentQueue()
-        player.setShuffleOrder(ShuffleOrder.UnshuffledShuffleOrder(player.mediaItemCount))
-        if (q == null || q.shuffled == shuffleModeEnabled) return
-        triggerShuffle()
-    }
-
-
-    override fun onUpdateNotification(
-        session: MediaSession,
-        startInForegroundRequired: Boolean,
-    ) {
-        // FG keep alive
-        if (player.isPlaying || !dataStore.get(KeepAliveKey, false)) {
-            super.onUpdateNotification(session, startInForegroundRequired)
-        }
-    }
-
-    override fun onDestroy() {
-        Log.i(TAG, "Terminating MusicService.")
-        deInitQueue()
-
-        mediaSession.player.stop()
-        mediaSession.release()
-        mediaSession.player.release()
-        super.onDestroy()
-        Log.i(TAG, "Terminated MusicService.")
-    }
-
-    override fun onBind(intent: Intent?) = super.onBind(intent) ?: binder
-
-    override fun onTaskRemoved(rootIntent: Intent?) {
-        Log.i(TAG, "onTaskRemoved called")
-        if (dataStore.get(StopMusicOnTaskClearKey, true) && !dataStore.get(KeepAliveKey, false)) {
-            Log.i(TAG, "onTaskRemoved kill")
-            pauseAllPlayersAndStopSelf()
+        if (playbackState == Player.STATE_IDLE) {
+            closeAudioEffectSession()
         } else {
-            Log.i(TAG, "onTaskRemoved def")
-            super.onTaskRemoved(rootIntent)
+            openAudioEffectSession()
         }
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession
-
-    inner class MusicBinder : Binder() {
-        val service: MusicService
-            get() = this@MusicService
+    override fun onOnDemandMediaItemsChanged(windowIndices: IntArray) {
+        Log.d(TAG, "onOnDemandMediaItemsChanged: ${windowIndices.toList()}")
+        queueBoard.value.updateQueue(player.currentMediaItemIndex, player.currentTimeline)
     }
 
-    companion object {
-        const val ROOT = "root"
-        const val SONG = "song"
-        const val ARTIST = "artist"
-        const val ALBUM = "album"
-        const val PLAYLIST = "playlist"
-        const val SEARCH = "search"
+    override fun onPlaybackSuppressionReasonChanged(@Player.PlaybackSuppressionReason reason: Int) {
+        Log.d(TAG, "onPlaybackSuppressionReasonChanged: $reason")
+        when (reason) {
+            Player.PLAYBACK_SUPPRESSION_REASON_NONE -> {
+                Log.d(TAG, "Playback suppression reason: NONE")
+            }
 
-        const val CHANNEL_ID = "music_channel_01"
-        const val CHANNEL_NAME = "fgs_workaround"
-        const val NOTIFICATION_ID = 888
-        const val ERROR_CODE_NO_STREAM = 1000001
-        const val CHUNK_LENGTH = 512 * 1024L
+            Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT -> {
+                Log.d(TAG, "Playback suppression reason: TRANSIENT")
+            }
 
-        const val COMMAND_GET_BINDER = "GET_BINDER"
+            Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_NOT_SEEKABLE -> {
+                Log.d(TAG, "Playback suppression reason: TRANSIENT_NOT_SEEKABLE")
+            }
+        }
     }
-}
 
-class MyAudioOffloadSupportProvider(
-    private val default: DefaultAudioOffloadSupportProvider,
-    private val disableGaplessOffload: Boolean
-) : DefaultAudioSink.AudioOffloadSupportProvider by default {
-    override fun getAudioOffloadSupport(
-        format: Format,
-        audioAttributes: AudioAttributes
-    ): AudioOffloadSupport {
-        val defaultResult = default.getAudioOffloadSupport(format, audioAttributes)
-        val audioOffloadSupport = AudioOffloadSupport.Builder()
-        return audioOffloadSupport
-            .setIsFormatSupported(defaultResult.isFormatSupported)
-            .setIsGaplessSupported(defaultResult.isGaplessSupported && !disableGaplessOffload)
-            .setIsSpeedChangeSupported(defaultResult.isSpeedChangeSupported)
-            .build()
+    override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+        super.onTimelineChanged(timeline, reason)
+        // Reload to check if songs were removed/rearranged
+        queueBoard.value.updateQueue(player.currentMediaItemIndex, player.currentTimeline)
+    }
+
+    override fun onAnalyticsListener(tag: String, event: Bundle) {
+        super.onAnalyticsListener(tag, event)
+    }
+
+    override fun onSessionEventSent(session: MediaLibraryService.MediaLibrarySession?, event: String, extras: Bundle?) {
+        super.onSessionEventSent(session, event, extras)
+    }
+
+    override fun onPlaylistMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
+        super.onPlaylistMetadataChanged(mediaMetadata)
+    }
+
+    fun updateQueue() {
+        queueBoard.value.updateQueue(player.currentMediaItemIndex, player.currentTimeline)
+    }
+
+    fun getOnlineQueue(): MultiQueueObject? {
+        return queueBoard.value.getCurrentQueue()
     }
 }
