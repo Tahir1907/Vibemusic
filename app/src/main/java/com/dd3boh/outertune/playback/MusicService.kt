@@ -956,24 +956,11 @@ class MusicService : MediaLibraryService(),
         }
     }
 
-    override fun onOnDemandMediaItemsChanged(windowIndices: IntArray) {
-        Log.d(TAG, "onOnDemandMediaItemsChanged: ${windowIndices.toList()}")
-        queueBoard.value.updateQueue(player.currentMediaItemIndex, player.currentTimeline)
-    }
-
     override fun onPlaybackSuppressionReasonChanged(@Player.PlaybackSuppressionReason reason: Int) {
         Log.d(TAG, "onPlaybackSuppressionReasonChanged: $reason")
         when (reason) {
             Player.PLAYBACK_SUPPRESSION_REASON_NONE -> {
                 Log.d(TAG, "Playback suppression reason: NONE")
-            }
-
-            Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT -> {
-                Log.d(TAG, "Playback suppression reason: TRANSIENT")
-            }
-
-            Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_NOT_SEEKABLE -> {
-                Log.d(TAG, "Playback suppression reason: TRANSIENT_NOT_SEEKABLE")
             }
         }
     }
@@ -981,26 +968,14 @@ class MusicService : MediaLibraryService(),
     override fun onTimelineChanged(timeline: Timeline, reason: Int) {
         super.onTimelineChanged(timeline, reason)
         // Reload to check if songs were removed/rearranged
-        queueBoard.value.updateQueue(player.currentMediaItemIndex, player.currentTimeline)
-    }
-
-    override fun onAnalyticsListener(tag: String, event: Bundle) {
-        super.onAnalyticsListener(tag, event)
-    }
-
-    override fun onSessionEventSent(session: MediaLibraryService.MediaLibrarySession?, event: String, extras: Bundle?) {
-        super.onSessionEventSent(session, event, extras)
-    }
-
-    override fun onPlaylistMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
-        super.onPlaylistMetadataChanged(mediaMetadata)
+        updateQueue()
     }
 
     fun updateQueue() {
         queueBoard.value.updateQueue(player.currentMediaItemIndex, player.currentTimeline)
     }
 
-    fun getOnlineQueue(): MultiQueueObject? {
-        return queueBoard.value.getCurrentQueue()
+    override fun onPlaylistMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
+        super.onPlaylistMetadataChanged(mediaMetadata)
     }
 }
